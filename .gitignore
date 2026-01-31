@@ -33,4 +33,7 @@ pytest_cache/
 .DS_Store
 
 node_modules/
-dist/
+alembic/versions/__pycache__/
+.mypy_cache/
+.ruff_cache/
+.pyright/

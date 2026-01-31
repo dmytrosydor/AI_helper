@@ -1,23 +1,24 @@
-from fastapi import FastAPI, HTTPException
-from sqlalchemy import create_engine, text
-import os
+from fastapi import FastAPI, HTTPException, Depends
+from sqlalchemy import text
+from sqlalchemy.orm import Session
+from app.core.db import get_db
 
-DATABASE_URL = os.getenv("DATABASE_URL")
-
-engine = create_engine(DATABASE_URL)
+from app.api.v1.auth import router as auth_router
 
 app = FastAPI()
-
+app.include_router(auth_router)
 @app.get("/")
 def read_root():
-    return {"Hello": "Wodks;akdl;sarld"}
+    return {"Hello": "zxc"}
+
+
+
 @app.get("/db-health")
-def db_health():
+def db_health(db: Session = Depends(get_db)):
     try:
-        with engine.connect() as conn:
-            conn.execute(text("SELECT 1"))
-            conn.commit()
-        return {"status": "ok", "database": "connected"}
+        db.execute(text("SELECT 1"))
+
+        db.commit()
     except Exception as e:
         print(f"Database error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
