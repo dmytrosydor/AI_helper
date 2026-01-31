@@ -10,7 +10,7 @@ def register_user(db: Session, user_data: UserCreate) -> User:
     user = User(
         email=user_data.email,
         hashed_password=hash_password(user_data.password),
-        full_name=user_data.username,
+        full_name=user_data.full_name,
         is_active=True,
         is_superuser=False,
     )
@@ -21,8 +21,8 @@ def register_user(db: Session, user_data: UserCreate) -> User:
     return user
 
 
-def authenticate_user(db: Session, username: str, password: str) -> str:
-    user = db.query(User).filter(User.full_name == username).first()
+def authenticate_user(db: Session, email: str, password: str) -> str:
+    user = db.query(User).filter(User.email == email).first()
     if not user:
         return None
 
