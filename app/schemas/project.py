@@ -8,6 +8,11 @@ class ProjectBase(BaseModel):
 class ProjectCreate(ProjectBase):
     pass
 
+class ProjectUpdate(BaseModel):
+    name: str
+    description: str | None = None
+
+
 class ProjectResponse(ProjectBase):
     id: int
     name: str
