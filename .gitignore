@@ -37,3 +37,5 @@ alembic/versions/__pycache__/
 .mypy_cache/
 .ruff_cache/
 .pyright/
+
+uploads/
