@@ -5,10 +5,12 @@ from app.core.db import get_db
 
 from app.api.v1.auth import router as auth_router
 from app.api.v1.projects import router as project_router
+from app.api.v1.documents import router as document_router
 
 app = FastAPI()
 app.include_router(auth_router)
 app.include_router(project_router)
+app.include_router(document_router)
 @app.get("/")
 def read_root():
     return {"Hello": "zxc"}
