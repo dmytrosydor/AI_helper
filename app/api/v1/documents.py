@@ -47,7 +47,7 @@ def upload_document(
         file_path=file_path,
         project_id=project_id,
     )
-    background_tasks.add_task(rag_service.process_document,db, document)
+    background_tasks.add_task(rag_service.process_document, document.id)
     return document
 
 @router.get("/", response_model=list[DocumentResponse])

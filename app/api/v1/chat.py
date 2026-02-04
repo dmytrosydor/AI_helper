@@ -1,0 +1,30 @@
+from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy.orm import Session
+from app.core.db import get_db
+from app.api.deps import get_current_user
+from app.models.user import User
+from app.schemas.chat import ChatRequest, ChatResponse
+from app.services.chat_service import chat_service
+from app.crud import project as crud_project
+
+router = APIRouter(prefix="/projects/{project_id}/chat", tags=["Chat"])
+
+@router.post("/", response_model=ChatResponse)
+def ask_question(
+    project_id: int,
+    request: ChatRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    # 1. Перевіряємо, чи існує проєкт і чи має юзер до нього доступ
+    project = crud_project.get_by_id_and_owner(db, owner_id=current_user.id, project_id=project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    # 2. Запускаємо логіку чату
+    result = chat_service.chat(db, project_id, request.query)
+
+    return ChatResponse(
+        answer=result["answer"],
+        sources=result["sources"],
+    )
