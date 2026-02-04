@@ -7,7 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.api.v1.auth import router as auth_router
 from app.api.v1.projects import router as project_router
 from app.api.v1.documents import router as document_router
-
+from app.api.v1.chat import router as chat_router
 app = FastAPI()
 origins = [
     "http://localhost:3000",  # React / Next.js
@@ -23,6 +23,7 @@ app.add_middleware(
 app.include_router(auth_router)
 app.include_router(project_router)
 app.include_router(document_router)
+app.include_router(chat_router)
 @app.get("/")
 def read_root():
     return {"Hello": "zxc"}
