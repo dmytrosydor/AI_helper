@@ -24,7 +24,7 @@ class RagService:
             print(f"Gemini API Error: {e}")
             return []
 
-    def process_document(self, document_id: int): # <--- Приймаємо тільки ID
+    def process_document(self, document_id: int):
         # Відкриваємо власну сесію
         with SessionLocal() as db:
             print(f"--- 🚀 Start processing document ID {document_id} ---")
@@ -34,46 +34,61 @@ class RagService:
                 print("❌ Document not found in DB")
                 return
 
+            # 1. Починаємо обробку: статус "processing"
+            document.processing_status = "processing"
+            db.commit()
+
             try:
                 full_text = pdf_service.extract_text(document.file_path)
+
+                if not full_text:
+                    print(f"⚠️ Document {document.id} has no text")
+                    # Помилка: пустий текст
+                    document.processing_status = "failed"
+                    db.commit()
+                    return
+
+                chunk_size = 1000
+                overlap = 100
+                chunks = []
+
+                for i in range(0, len(full_text), chunk_size - overlap):
+                    chunk = full_text[i : i + chunk_size]
+                    if len(chunk) > 50:
+                        chunks.append(chunk)
+
+                print(f"✂️ Created {len(chunks)} chunks. Vectorizing...")
+
+                new_chunks = []
+                for idx, chunk_text in enumerate(chunks):
+                    vector = self.get_embedding(chunk_text)
+
+                    if vector:
+                        db_chunk = DocumentChunk(
+                            document_id=document.id,
+                            chunk_index=idx,
+                            chunk_text=chunk_text,
+                            embedding=vector,
+                        )
+                        new_chunks.append(db_chunk)
+
+                if new_chunks:
+                    db.add_all(new_chunks)
+                    # 2. Успіх: статус "completed"
+                    document.processing_status = "completed"
+                    db.commit()
+                    print(f"✅ Successfully saved {len(new_chunks)} chunks")
+                else:
+                    print(f"⚠️ No chunks were created/saved")
+                    # Помилка: чанки не створились
+                    document.processing_status = "failed"
+                    db.commit()
+
             except Exception as e:
-                print(f"❌ Error reading PDF: {e}")
-                return
-
-            if not full_text:
-                print(f"⚠️ Document {document.id} has no text")
-                return
-
-            chunk_size = 1000
-            overlap = 100
-            chunks = []
-
-            for i in range(0, len(full_text), chunk_size - overlap):
-                chunk = full_text[i : i + chunk_size]
-                # ВИПРАВЛЕНО: зберігаємо, якщо текст БІЛЬШИЙ за 50 символів
-                if len(chunk) > 50:
-                    chunks.append(chunk)
-
-            print(f"✂️ Created {len(chunks)} chunks. Vectorizing...")
-
-            new_chunks = []
-            for idx, chunk_text in enumerate(chunks):
-                vector = self.get_embedding(chunk_text)
-
-                if vector:
-                    db_chunk = DocumentChunk(
-                        document_id=document.id,
-                        chunk_index=idx,
-                        chunk_text=chunk_text,
-                        embedding=vector,
-                    )
-                    new_chunks.append(db_chunk)
-
-            if new_chunks:
-                db.add_all(new_chunks)
+                print(f"❌ Error processing document: {e}")
+                # 3. Глобальна помилка: статус "failed"
+                document.processing_status = "failed"
                 db.commit()
-                print(f"✅ Successfully saved {len(new_chunks)} chunks")
-            else:
-                print(f"⚠️ No chunks were created/saved")
+
 
 rag_service = RagService()
