@@ -2,12 +2,24 @@ from fastapi import FastAPI, HTTPException, Depends
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 from app.core.db import get_db
+from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.v1.auth import router as auth_router
 from app.api.v1.projects import router as project_router
 from app.api.v1.documents import router as document_router
 
 app = FastAPI()
+origins = [
+    "http://localhost:3000",  # React / Next.js
+]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Або заміни на origins, якщо хочеш суворіше
+    allow_credentials=True,
+    allow_methods=["*"],  # Дозволити всі методи (GET, POST, DELETE...)
+    allow_headers=["*"],  # Дозволити всі заголовки (Authorization, Content-Type...)
+)
 app.include_router(auth_router)
 app.include_router(project_router)
 app.include_router(document_router)

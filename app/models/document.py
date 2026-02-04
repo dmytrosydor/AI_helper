@@ -43,7 +43,7 @@ class DocumentChunk(Base):
 
     chunk_text: Mapped[str] = mapped_column(Text)
 
-    embedding: Mapped[list[float]] = mapped_column(Vector(1536))  # розмірність чанку
+    embedding: Mapped[list[float]] = mapped_column(Vector(768))  # розмірність чанку
 
     document: Mapped["Document"] = relationship(back_populates="chunks")
 
