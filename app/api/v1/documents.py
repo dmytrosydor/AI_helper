@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Response
+from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Response, BackgroundTasks
 from sqlalchemy.orm import Session
 
 from app.core.db import get_db
@@ -7,6 +7,7 @@ from app.schemas.document import DocumentResponse, DocumentCreate
 from app.models.user import User
 from app.crud import document as crud_document
 from app.crud import project as crud_project
+from app.services.rag_service import rag_service
 from app.utils.file_storage import save_upload_file, delete_file
 
 router = APIRouter(prefix="/projects/{project_id}/documents", tags=["Documents"])
@@ -15,6 +16,7 @@ router = APIRouter(prefix="/projects/{project_id}/documents", tags=["Documents"]
 
 @router.post("/", response_model=DocumentResponse, status_code=status.HTTP_201_CREATED)
 def upload_document(
+        background_tasks: BackgroundTasks,
         project_id: int,
         file: UploadFile = File(...),
         db: Session = Depends(get_db),
@@ -45,6 +47,7 @@ def upload_document(
         file_path=file_path,
         project_id=project_id,
     )
+    background_tasks.add_task(rag_service.process_document,db, document)
     return document
 
 @router.get("/", response_model=list[DocumentResponse])
