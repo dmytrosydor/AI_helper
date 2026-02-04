@@ -18,7 +18,7 @@ class Document(Base):
     file_path: Mapped[str] = mapped_column(String(255))
 
     project_id: Mapped[int] = mapped_column(ForeignKey("projects.id", ondelete="CASCADE"))
-
+    processing_status: Mapped[str] = mapped_column(String(50), default="pending")
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())
 
     project: Mapped["Project"] = relationship(back_populates="documents")
