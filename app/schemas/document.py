@@ -15,6 +15,6 @@ class DocumentResponse(DocumentBase):
     id: int
     project_id: int
     created_at: datetime
-
+    processing_status: str
     class Config:
         from_attributes = True
