@@ -5,6 +5,7 @@ from app.core.db import get_db
 from app.api.deps import get_current_user
 from app.schemas.document import DocumentResponse, DocumentCreate
 from app.models.user import User
+from app.models.document import Document
 from app.crud import document as crud_document
 from app.crud import project as crud_project
 from app.services.rag_service import rag_service
@@ -33,6 +34,18 @@ def upload_document(
 
     if not file.filename:
         raise HTTPException(status_code=status.HTTP_400_NOT_FOUND, detail="Filename is missing")
+
+    existing_document = db.query(Document).filter(
+        Document.project_id == project_id,
+        Document.filename == file.filename
+    ).first()
+
+    if existing_document:
+        # 409 Conflict - стандартний код для дублікатів
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"File '{file.filename}' already exists. Please delete it first."
+        )
     try:
         file_path = save_upload_file(file)
 
@@ -50,6 +63,23 @@ def upload_document(
     background_tasks.add_task(rag_service.process_document, document.id)
     return document
 
+
+@router.get("/{document_id}", response_model=DocumentResponse)
+def get_document(
+        project_id: int,
+        document_id: int,
+        db: Session = Depends(get_db),
+        current_user: User = Depends(get_current_user),
+):
+    project = crud_project.get_by_id_and_owner(db, owner_id=current_user.id, project_id=project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    document = crud_document.get_by_id_and_project_id(db, project_id, document_id)
+    if not document:
+        raise HTTPException(status_code=404, detail="Document not found")
+
+    return document
 @router.get("/", response_model=list[DocumentResponse])
 def read_documents(
         project_id:int,
