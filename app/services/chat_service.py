@@ -5,6 +5,7 @@ from app.core.config import settings
 from app.core.db import SessionLocal
 from app.models.document import DocumentChunk, Document
 from app.services.rag_service import rag_service
+from app.core.prompts import ChatPrompts
 
 client = genai.Client(api_key=settings.GEMINI_API_KEY)
 
@@ -47,18 +48,10 @@ class ChatService:
         except Exception:
             pass
 
-            # 4. Промпт для Gemini
-        prompt = f"""
-        Ти - розумний асистент. Твоє завдання - відповідати на питання користувача,
-        використовуючи ТІЛЬКИ наданий нижче контекст.
-        Якщо в контексті немає відповіді, так і скажи: "Я не знаю відповіді на основі наданих документів".
-        
-        КОНТЕКСТ:
-        {context_text}
-
-        ПИТАННЯ КОРИСТУВАЧА:
-        {query_text}
-        """
+        prompt = ChatPrompts.MAIN_CHAT.format(
+            context=context_text,
+            query=query_text
+        )
 
         try:
             response = client.models.generate_content(
