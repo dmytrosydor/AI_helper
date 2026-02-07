@@ -38,11 +38,13 @@ def ask_question(
     )
 
 
-@router.get("/history",response_model=ChatHistoryResponse)
+@router.get("/history",response_model=list[ChatHistoryResponse])
 def get_project_history(
     project_id: int,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    limit: int = 100,
+    skip: int = 0,
 ):
     project = crud_project.get_by_id_and_owner(
         db,
@@ -52,4 +54,4 @@ def get_project_history(
 
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
-    return crud_chat.get_chat_history(db,project_id)
+    return crud_chat.get_chat_history(db,project_id,limit,skip)

@@ -24,6 +24,19 @@ class Project(Base):
         back_populates="project",
         cascade="all, delete-orphan",
     )
+    analysis: Mapped["ProjectAnalysis"] = relationship(
+        "ProjectAnalysis",
+        back_populates="project",
+        uselist=False,  # Це зв'язок One-to-One
+        cascade="all, delete-orphan",
+    )
 
-    def __repr__(self):
-        return f"<Project id={self.id} name={self.name}>"
+    analysis_items: Mapped[list["ProjectAnalysisItem"]] = relationship(
+        "ProjectAnalysisItem",
+        back_populates="project",
+        cascade="all, delete-orphan"
+    )
+
+
+def __repr__(self):
+    return f"<Project id={self.id} name={self.name}>"
