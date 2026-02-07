@@ -17,4 +17,4 @@ class ChatHistoryResponse(BaseModel):
     created_at: datetime
 
     class Config:
-        from_attribute = True
+        from_attributes = True
