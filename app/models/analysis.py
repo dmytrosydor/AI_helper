@@ -12,7 +12,7 @@ class ProjectAnalysis(Base):
 
     summary: Mapped[str | None] = mapped_column(Text, nullable=True)
     key_points: Mapped[str | None] = mapped_column(Text, nullable=True)
-    exam_questions: Mapped[str | None] = mapped_column(Text, nullable=True)
+    exam_questions: Mapped[str | None] = mapped_column(JSONB, nullable=True)
 
 
     project = relationship("Project", back_populates="analysis")
@@ -27,6 +27,6 @@ class ProjectAnalysisItem(Base):
 
     summary: Mapped[str | None] = mapped_column(Text, nullable=True)
     key_points: Mapped[str | None] = mapped_column(Text, nullable=True)
-    exam_questions: Mapped[str | None] = mapped_column(Text, nullable=True)
+    exam_questions: Mapped[str | None] = mapped_column(JSONB, nullable=True)
 
     project = relationship("Project")
