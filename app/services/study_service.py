@@ -145,7 +145,7 @@ class StudyService:
         content = f"{instruction}\n\nТЕКСТ:\n{text_or_prompt}" if instruction else text_or_prompt
         try:
             response = client.models.generate_content(
-                model="gemini-1.5-flash", # Використовуй 1.5-flash, він стабільніший
+                model="gemini-3-flash-preview", # Використовуй 1.5-flash, він стабільніший
                 contents=content
             )
             return response.text
@@ -162,7 +162,7 @@ class StudyService:
         """
         try:
             response = client.models.generate_content(
-                model="gemini-1.5-flash",
+                model="gemini-3-flash-preview",
                 contents=prompt,
                 config=types.GenerateContentConfig(
                     response_mime_type="application/json",

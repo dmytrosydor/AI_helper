@@ -9,7 +9,6 @@ class ProjectAnalysis(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     project_id: Mapped[int] = mapped_column(ForeignKey("projects.id", ondelete="CASCADE"))
 
-    documents_hash : Mapped[str] = mapped_column(String(255), nullable=False, index=True)
 
     summary: Mapped[str | None] = mapped_column(Text, nullable=True)
     key_points: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -22,9 +21,9 @@ class ProjectAnalysisItem(Base):
     __tablename__ = "project_analysis_item"
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    project_id: Mapped[int] = mapped_column(ForeignKey("project_analysis.id", ondelete="CASCADE"))
+    project_id: Mapped[int] = mapped_column(ForeignKey("projects.id", ondelete="CASCADE"))
 
-    document_hash: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    documents_hash: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
 
     summary: Mapped[str | None] = mapped_column(Text, nullable=True)
     key_points: Mapped[str | None] = mapped_column(Text, nullable=True)
