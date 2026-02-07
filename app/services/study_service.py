@@ -99,6 +99,25 @@ class StudyService:
         setattr(item, field, val_to_save)
         db.commit()
 
+    def _is_valid_result(self, result) -> bool:
+        """Перевіряє, чи варто зберігати цей результат у базу"""
+
+        # 1. Якщо це Екзамен (об'єкт ExamResponse)
+        if hasattr(result, "questions"):
+            # Не зберігаємо, якщо питань немає
+            return bool(result.questions)
+
+        # 2. Якщо це Текст (Summary, Key Points)
+        if isinstance(result, str):
+            if not result.strip():
+                return False  # Пустий рядок
+            if "Виникла помилка" in result or result.startswith("Error:"):
+                return False  # Повідомлення про помилку
+            if len(result) < 50:
+                return False  # Підозріло коротка відповідь
+            return True
+
+        return False
     # --- MAIN ORCHESTRATOR (Головна функція) ---
 
     def _process_request(self, db: Session, project_id: int, document_ids: list[int] | None, field_name: str, prompt_template: str, response_schema=None):
@@ -135,10 +154,13 @@ class StudyService:
         result = self._generate_ai(full_prompt, schema=response_schema)
 
         # 3. Збереження
-        if not document_ids:
-            self._save_full_project_cache(db, project_id, field_name, result)
+        if self._is_valid_result(result):
+            if not document_ids:
+                self._save_full_project_cache(db, project_id, field_name, result)
+            else:
+                self._save_partial_cache(db, project_id, self._get_docs_hash(document_ids), field_name, result)
         else:
-            self._save_partial_cache(db, project_id, self._get_docs_hash(document_ids), field_name, result)
+            print(f"Warning: Invalid result for {field_name}: {result}")
 
         return result
 
