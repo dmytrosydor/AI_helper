@@ -17,7 +17,7 @@ origins = [
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Або заміни на origins, якщо хочеш суворіше
+    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],  # Або заміни на origins, якщо хочеш суворіше
     allow_credentials=True,
     allow_methods=["*"],  # Дозволити всі методи (GET, POST, DELETE...)
     allow_headers=["*"],  # Дозволити всі заголовки (Authorization, Content-Type...)
