@@ -135,3 +135,14 @@ class ChatPrompts:
     
 Use Markdown for formatting. Bold headings (Heading), use bulleted lists (-) for listing, and horizontal separators (---) for structure.
        """
+    REFORMAT_USER_QUESTION = """
+        Given the following conversation history and a follow-up question, rephrase the follow-up question to be a standalone question.
+        Do not answer the question, just rewrite it to be clear and contain all necessary context (names, dates, topics) from the history.
+        
+        Chat History:
+        {history}
+        
+        Follow Up Input: {question}
+        
+        Standalone Question (in Ukrainian):
+        """
