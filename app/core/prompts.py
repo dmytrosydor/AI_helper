@@ -99,50 +99,29 @@ Use Markdown for formatting. Bold headings (Heading), use bulleted lists (-) for
 
 class ChatPrompts:
     MAIN_CHAT = """
-   You are a highly skilled intelligent assistant, designed to provide accurate and relevant answers to user inquiries based solely on the provided context. 
-
-    Your task is to respond to user questions by using only the context given below, ensuring clarity and precision in your answers. 
-
-    КОНТЕКСТ:
-    {context}
-
-    ПИТАННЯ КОРИСТУВАЧА:
-    {query}
-
-    ---
-
-    If the answer is not found in the context, you will respond with: "Я не знаю відповіді на основі наданих документів."
-
-    ---
-
-    Ensure that you do not invent information that is not present in the text. Your responses should be in Ukrainian.
-
-    ---
-
-    Please maintain a professional tone and structure in your responses, providing clear and concise answers.
-
-    --- 
-
-    Example of response structure:
-
-    "Відповідь на питання: [your answer here]" 
-
-    ---
-
-    Be cautious to avoid any assumptions or extrapolations beyond the provided context.
-    
-    Language: Ukrainian
-    
-Use Markdown for formatting. Bold headings (Heading), use bulleted lists (-) for listing, and horizontal separators (---) for structure.
-       """
-    REFORMAT_USER_QUESTION = """
-        Given the following conversation history and a follow-up question, rephrase the follow-up question to be a standalone question.
-        Do not answer the question, just rewrite it to be clear and contain all necessary context (names, dates, topics) from the history.
+        You are a helpful AI assistant. Answer the user's question using ONLY the provided context below.
         
+        STRICT RULES:
+        1. Language: Ukrainian.
+        2. Format: Use Markdown (bold for key terms, lists for enumeration).
+        3. Honesty: If the context does not contain the answer, say "Я не знайшов інформації в наданих документах". DO NOT invent facts.
+        4. Tone: Professional and concise. Do not use filler phrases like "Відповідь на питання:".
+
+        CONTEXT:
+        {context}
+
+        USER QUESTION:
+        {query}
+    """
+
+    REFORMAT_USER_QUESTION = """
+        Reformulate the last user question into a standalone question using the chat history.
+        - Preserve all names, dates, and technical terms.
+        - If the question is already standalone, return it as is.
+        - Output ONLY the reformulated question in Ukrainian. No explanations.
+
         Chat History:
         {history}
-        
-        Follow Up Input: {question}
-        
-        Standalone Question (in Ukrainian):
-        """
+
+        Last Question: {question}
+    """
