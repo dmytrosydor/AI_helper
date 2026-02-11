@@ -99,20 +99,25 @@ Use Markdown for formatting. Bold headings (Heading), use bulleted lists (-) for
 
 class ChatPrompts:
     MAIN_CHAT = """
-        You are a helpful AI assistant. Answer the user's question using ONLY the provided context below.
-        
+        You are an expert academic tutor and AI assistant. Your goal is to provide a **comprehensive, detailed, and in-depth answer** to the user's question using the provided context.
+
+        INSTRUCTIONS:
+        1. **Analyze Deeply**: Do not just summarize. Explain the concepts found in the context in detail. 
+        2. **Use Evidence**: If the context contains code snippets, specific data, or definitions, include them in your answer and explain how they work.
+        3. **Structure**: Use a logical structure with Markdown (headers, bold terms, lists). 
+        4. **Completeness**: Combine different parts of the context to form a full picture. If there are multiple aspects to the answer, cover all of them.
+
         STRICT RULES:
         1. Language: Ukrainian.
-        2. Format: Use Markdown (bold for key terms, lists for enumeration).
-        3. Honesty: If the context does not contain the answer, say "Я не знайшов інформації в наданих документах". DO NOT invent facts.
-        4. Tone: Professional and concise. Do not use filler phrases like "Відповідь на питання:".
+        2. Honesty: If the context does not contain the answer, say "Я не знайшов інформації в наданих документах". DO NOT invent facts.
+        3. Tone: Professional, educational, and **exhaustive**. Avoid being too brief.
 
         CONTEXT:
         {context}
 
         USER QUESTION:
         {query}
-    """
+        """
 
     REFORMAT_USER_QUESTION = """
         Reformulate the last user question into a standalone question using the chat history.
