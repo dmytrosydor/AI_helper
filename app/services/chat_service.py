@@ -1,7 +1,8 @@
 import json
 
 from sqlalchemy.orm import Session
-from sqlalchemy import select
+from sqlalchemy.sql import func
+from sqlalchemy import select, text
 from google import genai
 from app.core.config import settings
 from app.core.db import SessionLocal
@@ -49,7 +50,17 @@ class ChatService:
             print(f"Gemini Error: {e}")
             return question
 
+    def _rrf_merge(self,vector_results,keyword_results,k=60):
+        scores = {}
 
+        for rank, item in enumerate(vector_results):
+            if item.id not in scores:
+                scores[item.id] = {"item":item,"score":0}
+            scores[item.id]["score"] += 1/(k+rank+1)
+
+        sorted_items = sorted(scores.values(), key=lambda x: x["score"], reverse=True)
+
+        return [entry["item"] for entry in sorted_items]
     @traceable(name="chat_pipeline")
     def stream_chat(self, db: Session, project_id: int,user_id:int, query_text: str):
         query_reformat = self._reformat_question(db, query_text, project_id)
@@ -60,29 +71,44 @@ class ChatService:
             return
 
         # 2. Пошук схожих шматків у базі
-        stmt = (
+        vector_stmt = (
             select(DocumentChunk)
             .join(Document)
             .filter(Document.project_id == project_id)
             .order_by(DocumentChunk.embedding.l2_distance(query_vector))
             .limit(5)
         )
-        chunks = db.scalars(stmt).all()
+        vector_chunks = db.scalars(vector_stmt).all()
 
-        chunks = db.scalars(stmt).all()
+        keyword_stmt = (
+            select(DocumentChunk)
+            .join(Document)
+            .filter(Document.project_id == project_id)
+            .filter(
+                DocumentChunk.content_tsvector.op("@@")(
+                    func.websearch_to_tsquery("simple",query_reformat)
+                )
+            )
+            .limit(10)
+        )
 
+        keyword_chunks = db.scalars(keyword_stmt).all()
+
+        final_chunks = self._rrf_merge(vector_chunks,keyword_chunks)
+
+        final_chunks = final_chunks[:7]
         context_text = ""
         sources = []
 
-        if chunks:
-            context_text = "\n\n".join([chunk.chunk_text for chunk in chunks])
-            sources = list(set([chunk.document.filename for chunk in chunks]))
+        if final_chunks:
+            context_text = "\n\n".join([chunk.chunk_text for chunk in final_chunks])
+            sources = list(set([chunk.document.filename for chunk in final_chunks]))
 
 
         yield f'data: {json.dumps({"type": "sources", "data": sources})}\n\n'
 
 
-        if not chunks:
+        if not final_chunks:
             yield f'data: {json.dumps({"type": "answer", "data": "Я не знайшов інформації в документах."})}\n\n'
             return
 
