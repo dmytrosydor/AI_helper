@@ -118,7 +118,7 @@ class ChatService:
         )
 
         try:
-            response_stream = client.models._generate_content_stream(
+            response_stream = client.models.generate_content_stream(
                 model=settings.GEMINI_MODEL,
                 contents=prompt
             )
