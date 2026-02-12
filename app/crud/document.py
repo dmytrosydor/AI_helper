@@ -1,10 +1,11 @@
-from sqlalchemy.orm import Session, Query
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
 from app.models.document import Document
 from app.schemas.document import DocumentCreate, DocumentUpdate
 
 
-def create(
-        db: Session,
+async def create(
+        db: AsyncSession,
         obj_in: DocumentCreate,
         file_path: str,
         project_id: int
@@ -15,43 +16,38 @@ def create(
         project_id=project_id
     )
     db.add(db_obj)
-    db.commit()
-    db.refresh(db_obj)
+    await db.commit()
+    await db.refresh(db_obj)
 
     return db_obj
 
 
-def get_by_id_and_project_id(
-        db: Session,
+async def get_by_id_and_project_id(
+        db: AsyncSession,
         project_id: int,
         document_id: int
 ) -> type[Document]:
-    return (
-        db.query(Document)
-        .filter(
-            Document.project_id == project_id, Document.id == document_id
-        ).first()
-    )
+    stmt = select(Document).filter(Document.id == document_id, Document.project_id == project_id)
+    result = await db.execute(stmt)
+    return result.scalars().first()
 
-def get_multiple_documents_by_project_id(
-        db: Session,
+
+
+async def get_multiple_documents_by_project_id(
+        db: AsyncSession,
         project_id: int,
         skip: int = 0,
         limit: int = 100
 )-> list[type[Document]]:
-    return (
-        db.query(Document)
-        .filter(Document.project_id == project_id)
-        .offset(skip)
-        .limit(limit)
-        .all()
-    )
+    stmt = select(Document).filter(Document.project_id == project_id).offset(skip).limit(limit)
+    result = await db.execute(stmt)
+    return result.scalars().all()
 
 
-def delete(
-        db: Session,
+async def delete(
+        db: AsyncSession,
         db_obj: Document
 ) -> Document:
-    db.delete(db_obj)
-    db.commit()
+    await db.delete(db_obj)
+    await db.commit()
     return db_obj

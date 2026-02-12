@@ -1,9 +1,13 @@
 import json
-from sqlalchemy.orm import Session
+
+from mako.testing.helpers import result_lines
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from google import genai
 from google.genai import types
 from pydantic import BaseModel
+from sqlalchemy.util import await_only
 
 from app.core.config import settings
 from app.core.prompts import StudyPrompts
@@ -22,7 +26,7 @@ class StudyService:
         """Створює унікальний підпис для набору файлів"""
         return ','.join(map(str, sorted(documents_ids)))
 
-    def _get_context(self, db: Session, project_id: int, document_ids: list[int] | None = None) -> str:
+    async def _get_context(self, db: AsyncSession, project_id: int, document_ids: list[int] | None = None) -> str:
         """Витягує текст з бази"""
         stmt = (
             select(DocumentChunk.chunk_text)
@@ -33,8 +37,16 @@ class StudyService:
         if document_ids:
             stmt = stmt.filter(Document.id.in_(document_ids))
 
-        chunks = db.scalars(stmt).all()
-        return "\n\n".join(chunks)
+        result = await db.execute(stmt)
+        chunks = result.scalars().all()
+
+        full_text = "\n\n".join(chunks)
+
+        if len(full_text) > 200_000:
+            return full_text[:200_000]
+        return full_text
+
+
 
     def _generate_ai(self, prompt: str, schema=None) -> str | BaseModel:
         """Єдина точка входу для запитів до AI"""
@@ -82,28 +94,36 @@ class StudyService:
         if field == "key_points" and not isinstance(data_to_save, str):
             data_to_save = json.dumps(data_to_save, ensure_ascii=False)
 
-        # exam_questions у нас JSONB, тому залишаємо як dict/list (SQLAlchemy сам розбереться)
-        # summary у нас TEXT, тому залишаємо як str
 
         setattr(db_obj, field, data_to_save)
 
-    def _save_full_project_cache(self, db: Session, project_id: int, field: str, value):
-        analysis = db.query(ProjectAnalysis).filter_by(project_id=project_id).first()
+    async def _save_full_project_cache(self, db: AsyncSession, project_id: int, field: str, value):
+        stmt = (
+            select(ProjectAnalysisItem)
+            .filter_by(project_id=project_id)
+        )
+        result = await db.execute(stmt)
+        analysis = result.scalars().first()
         if not analysis:
             analysis = ProjectAnalysis(project_id=project_id)
             db.add(analysis)
 
         self._save_data_to_db(analysis, field, value)
-        db.commit()
+        await db.commit()
 
-    def _save_partial_cache(self, db: Session, project_id: int, doc_hash: str, field: str, value):
-        item = db.query(ProjectAnalysisItem).filter_by(project_id=project_id, documents_hash=doc_hash).first()
+    async def _save_partial_cache(self, db: AsyncSession, project_id: int, doc_hash: str, field: str, value):
+        stmt = (
+            select(ProjectAnalysisItem)
+            .filter_by(project_id=project_id, documents_hash=doc_hash)
+        )
+        result = await db.execute(stmt)
+        item = result.scalars().first()
         if not item:
             item = ProjectAnalysisItem(project_id=project_id, documents_hash=doc_hash)
             db.add(item)
 
         self._save_data_to_db(item, field, value)
-        db.commit()
+        await db.commit()
 
     def _is_valid_result(self, result) -> bool:
         # Перевірка Pydantic моделей
@@ -121,16 +141,26 @@ class StudyService:
 
     # --- MAIN ORCHESTRATOR ---
 
-    def _process_request(self, db: Session, project_id: int, document_ids: list[int] | None, field_name: str, prompt_template: str, response_schema=None):
+    async def _process_request(self, db: AsyncSession, project_id: int, document_ids: list[int] | None, field_name: str, prompt_template: str, response_schema=None):
 
         # 1. Спроба взяти з кешу
         cached_data = None
         if not document_ids:
-            analysis = db.query(ProjectAnalysis).filter_by(project_id=project_id).first()
+            stmt = (
+                select(ProjectAnalysis)
+                .filter_by(project_id=project_id)
+            )
+            result = await db.execute(stmt)
+            analysis = result.scalars().first()
             if analysis: cached_data = getattr(analysis, field_name)
         else:
             doc_hash = self._get_docs_hash(document_ids)
-            item = db.query(ProjectAnalysisItem).filter_by(project_id=project_id, documents_hash=doc_hash).first()
+            stmt = (
+                select(ProjectAnalysisItem)
+                .filter_by(project_id=project_id, documents_hash=doc_hash)
+            )
+            result = await db.execute(stmt)
+            item = result.scalars().first()
             if item: cached_data = getattr(item, field_name)
 
         # 2. Якщо кеш є, треба його правильно відновити (Re-hydrate)
@@ -157,7 +187,7 @@ class StudyService:
                 return cached_data
 
         # 3. Генерація (якщо кешу немає або він битий)
-        context = self._get_context(db, project_id, document_ids)
+        context = await self._get_context(db, project_id, document_ids)
         if not context:
             if response_schema:
                 if response_schema == ExamResponse: return ExamResponse(questions=[])
@@ -170,45 +200,45 @@ class StudyService:
         # 4. Збереження
         if self._is_valid_result(result):
             if not document_ids:
-                self._save_full_project_cache(db, project_id, field_name, result)
+                await self._save_full_project_cache(db, project_id, field_name, result)
             else:
-                self._save_partial_cache(db, project_id, self._get_docs_hash(document_ids), field_name, result)
+                await self._save_partial_cache(db, project_id, self._get_docs_hash(document_ids), field_name, result)
 
         return result
 
     # --- PUBLIC API METHODS ---
 
-    def get_summary(self, db: Session, project_id: int, document_ids: list[int] | None) -> str:
-        return self._process_request(
+    async def get_summary(self, db: AsyncSession, project_id: int, document_ids: list[int] | None) -> str:
+        return await self._process_request(
             db, project_id, document_ids,
             field_name="summary",
             prompt_template=StudyPrompts.SUMMARY
         )
 
-    def get_keypoints(self, db: Session, project_id: int, document_ids: list[int] | None) -> KeyPointsResponse:
+    async def get_keypoints(self, db: AsyncSession, project_id: int, document_ids: list[int] | None) -> KeyPointsResponse:
 
-        return self._process_request(
+        return await self._process_request(
             db, project_id, document_ids,
             field_name="key_points",
             prompt_template=StudyPrompts.KEY_POINTS,
             response_schema=KeyPointsResponse
         )
 
-    def get_exam_questions(self, db: Session, project_id: int, document_ids: list[int] | None, difficulty="Medium",question_count = 10) -> ExamResponse:
+    async def get_exam_questions(self, db: AsyncSession, project_id: int, document_ids: list[int] | None, difficulty="Medium",question_count = 10) -> ExamResponse:
         prompt = StudyPrompts.EXAM_GENERATION.format(
             difficulty=difficulty,
             question_count=question_count,
             context="{context}"
         )
-        return self._process_request(
+        return await self._process_request(
             db, project_id, document_ids,
             field_name="exam_questions",
             prompt_template=prompt,
             response_schema=ExamResponse
         )
 
-    def answer_user_questions(self, db: Session, project_id: int, questions: list[str], document_ids: list[int] | None) -> str:
-        context = self._get_context(db, project_id, document_ids)
+    async def answer_user_questions(self, db: AsyncSession, project_id: int, questions: list[str], document_ids: list[int] | None) -> str:
+        context = await self._get_context(db, project_id, document_ids)
         if not context: return "Немає контексту."
 
         q_list_str = "\n".join([f"- {q}" for q in questions])

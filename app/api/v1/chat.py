@@ -1,6 +1,9 @@
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
+from sqlalchemy.util import await_only
+
 from app.core.db import get_db
 from app.api.deps import get_current_user
 from app.models.user import User
@@ -13,13 +16,13 @@ from app.crud import chat as crud_chat
 router = APIRouter(prefix="/projects/{project_id}/chat", tags=["Chat"])
 
 @router.post("/", response_model=ChatResponse)
-def ask_question(
+async def ask_question(
     project_id: int,
     request: ChatRequest,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    project = crud_project.get_by_id_and_owner(db, owner_id=current_user.id, project_id=project_id)
+    project = await crud_project.get_by_id_and_owner(db, owner_id=current_user.id, project_id=project_id)
 
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
@@ -32,14 +35,14 @@ def ask_question(
 
 
 @router.get("/history",response_model=list[ChatHistoryResponse])
-def get_project_history(
+async def get_project_history(
     project_id: int,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
     limit: int = 100,
     skip: int = 0,
 ):
-    project = crud_project.get_by_id_and_owner(
+    project = await crud_project.get_by_id_and_owner(
         db,
         owner_id=current_user.id,
         project_id=project_id,
@@ -47,4 +50,4 @@ def get_project_history(
 
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
-    return crud_chat.get_chat_history(db,project_id,limit,skip)
+    return await crud_chat.get_chat_history(db,project_id,limit,skip)

@@ -1,9 +1,11 @@
-from sqlalchemy.orm import Session
+from anyio.functools import AsyncCacheInfo
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
 from app.models import ChatHistory
 
 
-def createChatHistory(
-        db: Session,
+async def createChatHistory(
+        db: AsyncSession,
         project_id: int,
         user_id: int,
         question: str,
@@ -17,21 +19,22 @@ def createChatHistory(
     )
 
     db.add(db_obj)
-    db.commit()
-    db.refresh(db_obj)
+    await db.commit()
+    await db.refresh(db_obj)
     return db_obj
 
-def get_chat_history(
-        db: Session,
+async def get_chat_history(
+        db: AsyncSession,
         project_id: int,
         limit: int,
         skip: int
 ) -> list[type[ChatHistory]]:
-    return(
-        db.query(ChatHistory)
+    stmt =(
+        select(ChatHistory)
         .filter(ChatHistory.project_id == project_id)
         .order_by(ChatHistory.created_at.asc())
         .offset(skip)
         .limit(limit)
-        .all()
     )
+    result = await db.execute(stmt)
+    return list(result.scalars().all())

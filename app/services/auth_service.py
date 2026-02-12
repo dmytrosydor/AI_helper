@@ -1,4 +1,5 @@
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
 
 from app.models.user import User
 
@@ -6,7 +7,7 @@ from app.schemas.user import UserCreate
 from app.core.security import hash_password, verify_password, create_access_token
 
 
-def register_user(db: Session, user_data: UserCreate) -> User:
+async def register_user(db: AsyncSession, user_data: UserCreate) -> User:
     user = User(
         email=user_data.email,
         hashed_password=hash_password(user_data.password),
@@ -16,13 +17,15 @@ def register_user(db: Session, user_data: UserCreate) -> User:
     )
 
     db.add(user)
-    db.commit()
-    db.refresh(user)
+    await db.commit()
+    await db.refresh(user)
     return user
 
 
-def authenticate_user(db: Session, email: str, password: str) -> str:
-    user = db.query(User).filter(User.email == email).first()
+async def authenticate_user(db: AsyncSession, email: str, password: str) -> str:
+    stmt = select(User).filter(User.email == email)
+    result = await db.execute(stmt)
+    user = result.scalars().first()
     if not user:
         return None
 
