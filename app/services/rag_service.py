@@ -1,5 +1,5 @@
 from google import genai
-from google.genai import types # <--- Додано імпорт types
+from google.genai import types
 from app.core.config import settings
 from app.core.db import AsyncSessionLocal
 from sqlalchemy import select

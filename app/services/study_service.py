@@ -1,13 +1,10 @@
 import json
 
-from mako.testing.helpers import result_lines
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from google import genai
 from google.genai import types
 from pydantic import BaseModel
-from sqlalchemy.util import await_only
 
 from app.core.config import settings
 from app.core.prompts import StudyPrompts

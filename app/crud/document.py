@@ -1,7 +1,7 @@
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from app.models.document import Document
-from app.schemas.document import DocumentCreate, DocumentUpdate
+from app.schemas.document import DocumentCreate
 
 
 async def create(
