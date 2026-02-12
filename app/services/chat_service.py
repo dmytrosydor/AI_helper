@@ -1,12 +1,13 @@
 import json
 
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import joinedload
+from sqlalchemy import select
 from sqlalchemy.sql import func
 from sqlalchemy import select, text
 from google import genai
 from app.core.config import settings
-from app.core.db import SessionLocal
-from app.models.chat import  ChatHistory
+from app.models.chat import ChatHistory
 from app.crud.chat import get_chat_history
 from app.models.document import DocumentChunk, Document
 from app.services.rag_service import rag_service
@@ -16,16 +17,18 @@ from langsmith import traceable
 
 client = genai.Client(api_key=settings.GEMINI_API_KEY)
 
+
 class ChatService:
     @traceable(name="rewrite_question")
-    def _reformat_question(self,db:Session, question:str,project_id: int ):
-        last_messages = (
-            db.query(ChatHistory)
+    async def _reformat_question(self, db: AsyncSession, question: str, project_id: int):
+        stmt = (
+            select(ChatHistory)
             .filter(ChatHistory.project_id == project_id)
             .order_by(ChatHistory.created_at.desc())
             .limit(3)
-            .all()
         )
+        result = await db.execute(stmt)
+        last_messages = result.scalars().all()
         if not last_messages:
             return question
 
@@ -50,51 +53,57 @@ class ChatService:
             print(f"Gemini Error: {e}")
             return question
 
-    def _rrf_merge(self,vector_results,keyword_results,k=60):
+    def _rrf_merge(self, vector_results, keyword_results, k=60):
         scores = {}
 
         for rank, item in enumerate(vector_results):
             if item.id not in scores:
-                scores[item.id] = {"item":item,"score":0}
-            scores[item.id]["score"] += 1/(k+rank+1)
+                scores[item.id] = {"item": item, "score": 0}
+            scores[item.id]["score"] += 1 / (k + rank + 1)
 
         sorted_items = sorted(scores.values(), key=lambda x: x["score"], reverse=True)
 
         return [entry["item"] for entry in sorted_items]
+
     @traceable(name="chat_pipeline")
-    def stream_chat(self, db: Session, project_id: int,user_id:int, query_text: str):
-        query_reformat = self._reformat_question(db, query_text, project_id)
+    async def stream_chat(self, db: AsyncSession, project_id: int, user_id: int, query_text: str):
+        query_reformat = await self._reformat_question(db, query_text, project_id)
         query_vector = rag_service.get_embedding(query_reformat)
 
         if not query_vector:
-            yield f'data: {json.dumps({"error":"Error creating embedding"})}\n\n'
+            yield f'data: {json.dumps({"error": "Error creating embedding"})}\n\n'
             return
 
         # 2. Пошук схожих шматків у базі
         vector_stmt = (
             select(DocumentChunk)
+            .options(joinedload(DocumentChunk.document))
             .join(Document)
             .filter(Document.project_id == project_id)
             .order_by(DocumentChunk.embedding.l2_distance(query_vector))
             .limit(5)
         )
-        vector_chunks = db.scalars(vector_stmt).all()
+
+        vector_result = await db.execute(vector_stmt)
+        vector_chunks = vector_result.scalars().all()
 
         keyword_stmt = (
             select(DocumentChunk)
+            .options(joinedload(DocumentChunk.document))
             .join(Document)
             .filter(Document.project_id == project_id)
             .filter(
                 DocumentChunk.content_tsvector.op("@@")(
-                    func.websearch_to_tsquery("simple",query_reformat)
+                    func.websearch_to_tsquery("simple", query_reformat)
                 )
             )
             .limit(10)
         )
 
-        keyword_chunks = db.scalars(keyword_stmt).all()
+        result = await db.execute(keyword_stmt)
+        keyword_chunks = result.scalars().all()
 
-        final_chunks = self._rrf_merge(vector_chunks,keyword_chunks)
+        final_chunks = self._rrf_merge(vector_chunks, keyword_chunks)
 
         final_chunks = final_chunks[:7]
         context_text = ""
@@ -104,9 +113,7 @@ class ChatService:
             context_text = "\n\n".join([chunk.chunk_text for chunk in final_chunks])
             sources = list(set([chunk.document.filename for chunk in final_chunks]))
 
-
         yield f'data: {json.dumps({"type": "sources", "data": sources})}\n\n'
-
 
         if not final_chunks:
             yield f'data: {json.dumps({"type": "answer", "data": "Я не знайшов інформації в документах."})}\n\n'
@@ -130,15 +137,16 @@ class ChatService:
                     yield f'data: {json.dumps({"type": "answer", "data": chunk.text})}\n\n'
                     full_answer += chunk.text
 
-            createChatHistory(
+            await createChatHistory(
                 db=db,
                 project_id=project_id,
                 user_id=user_id,
-                question=query_text,  # Зберігаємо оригінальне питання
+                question=query_text,
                 answer=full_answer
             )
         except Exception as e:
             print(f"Stream Error: {e}")
             yield f'data: {json.dumps({"error": str(e)})}\n\n'
+
 
 chat_service = ChatService()

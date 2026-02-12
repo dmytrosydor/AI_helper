@@ -1,8 +1,8 @@
 from google import genai
 from google.genai import types # <--- Додано імпорт types
-from sqlalchemy.orm import Session
 from app.core.config import settings
-from app.core.db import SessionLocal
+from app.core.db import AsyncSessionLocal
+from sqlalchemy import select
 from app.models.document import Document, DocumentChunk
 from app.services.pdf_service import pdf_service
 
@@ -24,19 +24,25 @@ class RagService:
             print(f"Gemini API Error: {e}")
             return []
 
-    def process_document(self, document_id: int):
+    async def process_document(self, document_id: int):
         # Відкриваємо власну сесію
-        with SessionLocal() as db:
+        async with AsyncSessionLocal() as db:
             print(f"--- 🚀 Start processing document ID {document_id} ---")
 
-            document = db.query(Document).filter(Document.id == document_id).first()
+            stmt = (
+                select(Document)
+                .filter(Document.id == document_id)
+            )
+            result = await db.execute(stmt)
+            document = result.scalars().first()
+
             if not document:
                 print("❌ Document not found in DB")
                 return
 
             # 1. Починаємо обробку: статус "processing"
             document.processing_status = "processing"
-            db.commit()
+            await db.commit()
 
             try:
                 full_text = pdf_service.extract_text(document.file_path)
@@ -45,7 +51,7 @@ class RagService:
                     print(f"⚠️ Document {document.id} has no text")
                     # Помилка: пустий текст
                     document.processing_status = "failed"
-                    db.commit()
+                    await db.commit()
                     return
 
                 chunk_size = 1000
@@ -76,19 +82,19 @@ class RagService:
                     db.add_all(new_chunks)
                     # 2. Успіх: статус "completed"
                     document.processing_status = "completed"
-                    db.commit()
+                    await db.commit()
                     print(f"✅ Successfully saved {len(new_chunks)} chunks")
                 else:
                     print(f"⚠️ No chunks were created/saved")
                     # Помилка: чанки не створились
                     document.processing_status = "failed"
-                    db.commit()
+                    await db.commit()
 
             except Exception as e:
                 print(f"❌ Error processing document: {e}")
                 # 3. Глобальна помилка: статус "failed"
                 document.processing_status = "failed"
-                db.commit()
+                await db.commit()
 
 
 rag_service = RagService()

@@ -1,6 +1,6 @@
 from fastapi import FastAPI, HTTPException, Depends
 from sqlalchemy import text
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.db import get_db
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -37,11 +37,11 @@ def read_root():
 
 
 @app.get("/db-health")
-def db_health(db: Session = Depends(get_db)):
+async def db_health(db: AsyncSession = Depends(get_db)):
     try:
-        db.execute(text("SELECT 1"))
-
-        db.commit()
+        await db.execute(text("SELECT 1"))
     except Exception as e:
         print(f"Database error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+    return {"message": "OK"}
