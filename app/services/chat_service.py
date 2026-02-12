@@ -2,13 +2,11 @@ import json
 
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
-from sqlalchemy import select
 from sqlalchemy.sql import func
-from sqlalchemy import select, text
+from sqlalchemy import select
 from google import genai
 from app.core.config import settings
 from app.models.chat import ChatHistory
-from app.crud.chat import get_chat_history
 from app.models.document import DocumentChunk, Document
 from app.services.rag_service import rag_service
 from app.core.prompts import ChatPrompts

@@ -1,8 +1,5 @@
-from typing import Any
-
-from sqlalchemy.orm import Query
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, Result
+from sqlalchemy import select
 from app.models.project import Project
 from app.schemas.project import ProjectCreate, ProjectUpdate
 
