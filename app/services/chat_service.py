@@ -5,6 +5,7 @@ from sqlalchemy.orm import joinedload
 from sqlalchemy.sql import func
 from sqlalchemy import select
 from google import genai
+from openai import AsyncOpenAI
 from app.core.config import settings
 from app.models.chat import ChatHistory
 from app.models.document import DocumentChunk, Document
@@ -13,7 +14,7 @@ from app.core.prompts import ChatPrompts
 from app.crud.chat import createChatHistory
 from langsmith import traceable
 
-client = genai.Client(api_key=settings.GEMINI_API_KEY)
+ollama_client = AsyncOpenAI(base_url=settings.OLLAMA_BASE_URL, api_key="ollama")
 
 
 class ChatService:
@@ -41,14 +42,14 @@ class ChatService:
         )
 
         try:
-            response = client.models.generate_content(
-                model="gemini-2.5-flash-lite",
-                contents=prompt
+            response = await ollama_client.chat.completions.create(
+                model=settings.OLLAMA_MODEL,
+                messages=[{"role": "user", "content": prompt}]
             )
 
-            return response.text.strip()
+            return response.choices[0].message.content.strip()
         except Exception as e:
-            print(f"Gemini Error: {e}")
+            print(f"Ollama Error: {e}")
             return question
 
     def _rrf_merge(self, vector_results, keyword_results, k=60):
@@ -123,16 +124,18 @@ class ChatService:
         )
 
         try:
-            response_stream = client.models.generate_content_stream(
-                model=settings.GEMINI_MODEL,
-                contents=prompt
+            response_stream = await ollama_client.chat.completions.create(
+                model=settings.OLLAMA_MODEL,
+                messages=[{"role": "user", "content": prompt}],
+                stream=True
             )
 
             full_answer = ""
 
-            for chunk in response_stream:
-                if chunk.text:
-                    yield f'data: {json.dumps({"type": "answer", "data": chunk.text})}\n\n'
+            async for chunk in response_stream:
+                content = chunk.choices[0].delta.content
+                if content:
+                    yield f'data: {json.dumps({"type": "answer", "data": content})}\n\n'
                     full_answer += chunk.text
 
             await createChatHistory(
@@ -143,7 +146,7 @@ class ChatService:
                 answer=full_answer
             )
         except Exception as e:
-            print(f"Stream Error: {e}")
+            print(f"Ollama Stream Error: {e}")
             yield f'data: {json.dumps({"error": str(e)})}\n\n'
 
 

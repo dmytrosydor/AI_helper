@@ -1,3 +1,4 @@
+from openai import AsyncOpenAI
 from google import genai
 from google.genai import types
 from app.core.config import settings
@@ -6,13 +7,14 @@ from sqlalchemy import select
 from app.models.document import Document, DocumentChunk
 from app.services.pdf_service import pdf_service
 
-client = genai.Client(api_key=settings.GEMINI_API_KEY)
+ollama_client = AsyncOpenAI(base_url=settings.OLLAMA_BASE_URL, api_key="ollama")
+gemini_client = genai.Client(api_key=settings.GEMINI_API_KEY)
 
 class RagService:
     def get_embedding(self, text: str) -> list[float]:
         try:
             # Використовуємо text-embedding-004
-            result = client.models.embed_content(
+            result = gemini_client.models.embed_content(
                 model="gemini-embedding-001",
                 contents=text,
                 config=types.EmbedContentConfig(output_dimensionality=768)
