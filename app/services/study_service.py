@@ -5,7 +5,7 @@ from sqlalchemy import select
 from google import genai
 from google.genai import types
 from pydantic import BaseModel
-
+from openai import AsyncOpenAI
 from app.core.config import settings
 from app.core.prompts import StudyPrompts
 from app.models.document import Document, DocumentChunk
@@ -13,7 +13,7 @@ from app.models.analysis import ProjectAnalysis, ProjectAnalysisItem
 from app.schemas.study import ExamResponse, KeyPointsResponse, UserQuestionsResponse
 
 # Ініціалізація клієнта
-client = genai.Client(api_key=settings.GEMINI_API_KEY)
+ollama_client = AsyncOpenAI(base_url=settings.OLLAMA_BASE_URL, api_key="ollama")
 
 class StudyService:
 
@@ -45,7 +45,8 @@ class StudyService:
 
 
 
-    def _generate_ai(self, prompt: str, schema=None) -> str | BaseModel:
+
+    async  def _generate_ai(self, prompt: str, schema=None) -> str | BaseModel:
         """Єдина точка входу для запитів до AI"""
         config = None
         if schema:
@@ -55,15 +56,16 @@ class StudyService:
             )
 
         try:
-            response = client.models.generate_content(
-                model=settings.GEMINI_MODEL,
-                contents=prompt,
-                config=config
+            response = await ollama_client.chat.completions.create(
+                model=settings.OLLAMA_MODEL,
+                messages=[{"role": "user", "content": prompt}],
+                response_format={"type": "json_object"} if schema else None
             )
 
+            result_text = response.choices[0].message.content
             if schema:
-                # Повертаємо розпарсений Pydantic об'єкт
-                return response.parsed
+                data_dict = json.loads(result_text)
+                return schema(**data_dict)
             return response.text
 
         except Exception as e:
@@ -192,7 +194,7 @@ class StudyService:
             return "Текст відсутній."
 
         full_prompt = prompt_template.format(context=context)
-        result = self._generate_ai(full_prompt, schema=response_schema)
+        result = await self._generate_ai(full_prompt, schema=response_schema)
 
         # 4. Збереження
         if self._is_valid_result(result):
@@ -241,6 +243,6 @@ class StudyService:
         q_list_str = "\n".join([f"- {q}" for q in questions])
         full_prompt = StudyPrompts.USER_QUESTION.format(questions_list=q_list_str, context=context)
 
-        return self._generate_ai(full_prompt,schema=UserQuestionsResponse)
+        return await self._generate_ai(full_prompt,schema=UserQuestionsResponse)
 
 study_service = StudyService()

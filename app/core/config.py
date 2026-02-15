@@ -14,7 +14,8 @@ class Settings(BaseSettings):
 
     GEMINI_MODEL: str ="gemini-2.5-flash-lite"
 
-
+    OLLAMA_BASE_URL :str
+    OLLAMA_MODEL : str
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7
     model_config = SettingsConfigDict(env_file=".env",extra="ignore",env_ignore_empty=True)
