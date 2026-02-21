@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Response, Cookie
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
 from fastapi.security import OAuth2PasswordRequestForm
 from jose import jwt, JWTError
 
@@ -14,18 +15,20 @@ router = APIRouter(prefix="/auth", tags=["Auth"])
 
 
 @router.post("/register", response_model=UserResponse)
-def register(user_data: UserCreate, db: Session = Depends(get_db)):
+async def register(user_data: UserCreate, db: AsyncSession = Depends(get_db)):
     # TODO: add email verification
-    return register_user(db, user_data)
+    return await register_user(db, user_data)
 
 
 @router.post("/login", response_model=Token)
-def login(
+async def login(
         response: Response,
         form_data: OAuth2PasswordRequestForm = Depends(),
-        db: Session = Depends(get_db)
+        db: AsyncSession = Depends(get_db)
 ):
-    user = db.query(User).filter(User.email == form_data.username).first()
+    stmt = select(User).where(User.email == form_data.username)
+    result = await db.execute(stmt)
+    user = result.scalars().first()
 
     if not user or not verify_password(form_data.password, user.hashed_password):
         raise HTTPException(
@@ -41,9 +44,9 @@ def login(
     response.set_cookie(
         key="refresh_token",
         value=refresh_token,
-        httponly=True,   # 🛡️ JS не має доступу
-        secure=False,    # ⚠️ Зміни на True, коли підключиш HTTPS (на проді)
-        samesite="lax",  # Захист від CSRF
+        httponly=True,
+        secure=False,    # TODO Зміни на True, коли буде HTTPS
+        samesite="lax",
         max_age=7 * 24 * 60 * 60  # 7 днів
     )
 
@@ -54,10 +57,10 @@ def login(
 
 
 @router.post("/refresh", response_model=Token)
-def refresh_token(
+async def refresh_token(
         response: Response,
-        refresh_token: str | None = Cookie(None),  # FastAPI сам дістане з кук
-        db: Session = Depends(get_db)
+        refresh_token: str | None = Cookie(None),
+        db: AsyncSession = Depends(get_db)
 ):
     """
     Приймає refresh_token з кук і оновлює пару (Access + Cookie Refresh).
@@ -81,7 +84,9 @@ def refresh_token(
             raise credentials_exception
 
 
-        user = db.query(User).filter(User.id == int(user_id)).first()
+        stmt = select(User).where(User.id == int(user_id))
+        result = await db.execute(stmt)
+        user = result.scalars().first()
         if user is None:
             raise credentials_exception
 
@@ -110,7 +115,7 @@ def refresh_token(
 
 
 @router.post("/logout")
-def logout(response: Response):
+async def logout(response: Response):
     """
     Видаляє куку з refresh token.
     """

@@ -30,119 +30,114 @@ Use Markdown for formatting. Bold headings (Heading), use bulleted lists (-) for
     """
 
     KEY_POINTS = """
-    You are a skilled content summarizer with extensive experience in extracting key points from various types of texts. Your expertise lies in synthesizing information into concise and meaningful bullet points that capture the essence of the original content.
-
-    Your task is to identify and summarize the most important key points from the following text. Please find the text below:  
-    {context}
-    ---  
-    The output should be formatted as a bulleted list, with each point being succinct yet informative.  
-    ---  
-    Focus on clarity and brevity while ensuring that the main ideas are effectively communicated. If the text contains a large amount of information, feel free to generate multiple responses to cover all key aspects comprehensively.  
-    ---  
-    For example, if the text is about a new technology, you might extract points such as:  
-    - Key features of the technology  
-    - Benefits to users  
-    - Potential challenges or drawbacks  
-    ---  
-    Be cautious not to include redundant information or overly detailed explanations that detract from the main points. Aim for a balance between informativeness and conciseness.
-    Language: Ukrainian
     
-Use Markdown for formatting. Bold headings (Heading), use bulleted lists (-) for listing, and horizontal separators (---) for structure.
-    """
+        You are a meticulous academic analyst. Your goal is to create a **comprehensive** study guide by extracting ALL significant concepts from the text.
+
+        INSTRUCTIONS:
+        1. **Maximize Coverage**: Do not limit yourself to just the main ideas. Identify and extract every distinct concept, definition, rule, formula, or argument mentioned in the text.
+        2. **Granularity**: If a topic is complex, break it down into multiple specific key points rather than grouping everything into one generic point.
+        3. **Detail**: The description for each point must be detailed enough to understand the concept without re-reading the source text.
+        4. **Quantity**: Aim to extract as many relevant points as possible to cover the text fully.
+
+        For each item, you must provide:
+        - **Title**: A specific and clear name for the concept.
+        - **Description**: A comprehensive explanation.
+        - **Importance**: Rate as "High" (core concept), "Medium" (important detail), or "Low" (minor detail).
+        
+        language: Ukrainian
+
+        TEXT:
+        {context}
+        """
 
     EXAM_GENERATION = """
-    You are a strict examiner. Create a test of 5 questions based on the text.
+        You are a strict university professor. 
+        Create a **{difficulty}** exam of **{question_count}** multiple-choice questions based ONLY on the provided text.
 
-    OUTPUT FORMAT:
-    You must return a valid JSON object matching the requested schema. 
-    DO NOT use Markdown code blocks (like ```json). Just return the raw JSON.
+        RULES FOR QUESTIONS:
+        1. Focus on understanding concepts, NOT just memorizing dates or names.
+        2. Questions should require analyzing the text.
+        3. Difficulty level: **{difficulty}**.
+           - Easy: Basic definitions and facts directly from the text.
+           - Medium: Understanding relationships between concepts.
+           - Hard: Applying concepts to new situations or complex analysis.
 
-    Each question object must contain:
-    - "question": The question text.
-    - "options": A list of 4 distinct answers.
-    - "correct_answer": The exact text of the correct option.
-    - "explanation": Why this answer is correct.
+        RULES FOR OPTIONS:
+        1. Provide 4 options for each question.
+        2. **Distractors (wrong answers) MUST be plausible**. They should represent common misconceptions derived from the text.
+        3. The "explanation" field must detail WHY the correct answer is right AND why the others are wrong.
 
-    CONTEXT:
-    {context}
-    
-    Language: Ukrainian
-    """
+        OUTPUT SCHEMA (JSON):
+        Return a list of questions strictly following the requested schema. Do NOT return Markdown code blocks.
+
+        CONTEXT:
+        {context}
+
+        Language: Ukrainian
+        """
     USER_QUESTION = """
-    You are a knowledgeable AI assistant with expertise in educational content, particularly in the context of lectures and academic discussions. Your goal is to provide comprehensive answers to student inquiries, ensuring clarity and understanding.
+        You are a helpful academic AI tutor. Your task is to answer specific questions based on the provided lecture context.
 
-    Your task is to respond to a list of questions posed by a student concerning the content of lectures received on artificial intelligence. The questions and the relevant lecture context will be provided. 
+        INSTRUCTIONS:
+        1. Answer EACH question separately.
+        2. Use the provided context to form accurate answers.
+        3. If the answer is not in the context, state that clearly.
+        4. Format the "answer" field using Markdown (bold, lists) for readability.
 
-    Here are the details for your response:  
-    - STUDENT QUESTIONS:  
-      {questions_list}  
-    - LECTURE CONTEXT:  
-      {context}  
+        INPUT DATA:
+        - Questions: 
+        {questions_list}
+        
+        - Context:
+        {context}
 
-    ---
-
-    Your response should be structured logically, with each question addressed individually, followed by a clear explanation of the reasoning behind your answers. 
-
-    ---
-
-    Make sure to include relevant examples from the lecture context where applicable to enhance understanding. Focus on clarity and precision in your explanations, avoiding overly technical jargon unless it is necessary for the topic.
-
-    ---
-
-    Be cautious to ensure that your answers remain relevant to the questions asked and do not deviate into unrelated topics. Aim for a tone that is engaging and supportive, encouraging further discussion and inquiry from the student.
-    Language: Ukrainian
-
-
-Use Markdown for formatting. Bold headings (Heading), use bulleted lists (-) for listing, and horizontal separators (---) for structure.
-    """
+       OUTPUT SCHEMA:
+        Return a valid JSON object matching the UserQuestionsResponse schema.
+        Example structure (do NOT output this text, output valid JSON):
+        {{
+          "results": [
+            {{
+              "question": "Text of question 1",
+              "answer": "Detailed answer in Markdown..."
+            }},
+            ...
+          ]
+        }}
+        
+        Language: Ukrainian
+        """
 
 
 class ChatPrompts:
     MAIN_CHAT = """
-   You are a highly skilled intelligent assistant, designed to provide accurate and relevant answers to user inquiries based solely on the provided context. 
+        You are an expert academic tutor and AI assistant. Your goal is to provide a **comprehensive, detailed, and in-depth answer** to the user's question using the provided context.
 
-    Your task is to respond to user questions by using only the context given below, ensuring clarity and precision in your answers. 
+        INSTRUCTIONS:
+        1. **Analyze Deeply**: Do not just summarize. Explain the concepts found in the context in detail. 
+        2. **Use Evidence**: If the context contains code snippets, specific data, or definitions, include them in your answer and explain how they work.
+        3. **Structure**: Use a logical structure with Markdown (headers, bold terms, lists). 
+        4. **Completeness**: Combine different parts of the context to form a full picture. If there are multiple aspects to the answer, cover all of them.
 
-    КОНТЕКСТ:
-    {context}
+        STRICT RULES:
+        1. Language: Ukrainian.
+        2. Honesty: If the context does not contain the answer, say "Я не знайшов інформації в наданих документах". DO NOT invent facts.
+        3. Tone: Professional, educational, and **exhaustive**. Avoid being too brief.
 
-    ПИТАННЯ КОРИСТУВАЧА:
-    {query}
+        CONTEXT:
+        {context}
 
-    ---
+        USER QUESTION:
+        {query}
+        """
 
-    If the answer is not found in the context, you will respond with: "Я не знаю відповіді на основі наданих документів."
-
-    ---
-
-    Ensure that you do not invent information that is not present in the text. Your responses should be in Ukrainian.
-
-    ---
-
-    Please maintain a professional tone and structure in your responses, providing clear and concise answers.
-
-    --- 
-
-    Example of response structure:
-
-    "Відповідь на питання: [your answer here]" 
-
-    ---
-
-    Be cautious to avoid any assumptions or extrapolations beyond the provided context.
-    
-    Language: Ukrainian
-    
-Use Markdown for formatting. Bold headings (Heading), use bulleted lists (-) for listing, and horizontal separators (---) for structure.
-       """
     REFORMAT_USER_QUESTION = """
-        Given the following conversation history and a follow-up question, rephrase the follow-up question to be a standalone question.
-        Do not answer the question, just rewrite it to be clear and contain all necessary context (names, dates, topics) from the history.
-        
+        Reformulate the last user question into a standalone question using the chat history.
+        - Preserve all names, dates, and technical terms.
+        - If the question is already standalone, return it as is.
+        - Output ONLY the reformulated question in Ukrainian. No explanations.
+
         Chat History:
         {history}
-        
-        Follow Up Input: {question}
-        
-        Standalone Question (in Ukrainian):
-        """
+
+        Last Question: {question}
+    """

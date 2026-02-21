@@ -1,10 +1,11 @@
-from sqlalchemy.orm import Session, Query
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
 from app.models.project import Project
 from app.schemas.project import ProjectCreate, ProjectUpdate
 
 
-def create(
-        db: Session,
+async def create(
+        db: AsyncSession,
         obj_in: ProjectCreate,
         owner_id: int
 ) -> Project:
@@ -14,39 +15,33 @@ def create(
         owner_id=owner_id,
     )
     db.add(db_obj)
-    db.commit()
-    db.refresh(db_obj)
+    await db.commit()
+    await db.refresh(db_obj)
     return db_obj
 
 
-def get_multi_by_owner(
-        db: Session,
+async def get_multi_by_owner(
+        db: AsyncSession,
         owner_id: int,
         skip: int = 0,
         limit: int = 100,
-) -> Query[type[Project]]:
-    return (
-        db.query(Project)
-        .filter(Project.owner_id == owner_id)
-        .offset(skip)
-        .limit(limit)
-    )
+) -> list[Project]:
+    stmt = select(Project).filter(Project.owner_id == owner_id).offset(skip).limit(limit)
+    result = await db.execute(stmt)
+    return result.scalars().all()
 
 
-def get_by_id_and_owner(
-        db: Session,
+async def get_by_id_and_owner(
+        db: AsyncSession,
         owner_id: int,
         project_id: int,
 ) -> type[Project] | None:
-    return (
-        db.query(Project)
-        .filter(Project.id == project_id, Project.owner_id == owner_id)
-        .first()
-    )
+    stmt = select(Project).filter(Project.id == project_id, Project.owner_id == owner_id)
+    result = await db.execute(stmt)
+    return result.scalars().first()
 
-
-def update(
-        db: Session,
+async def update(
+        db: AsyncSession,
         db_obj: Project,
         obj_in: ProjectUpdate,
 ) -> Project:
@@ -60,15 +55,15 @@ def update(
         setattr(db_obj, field, value)
 
     db.add(db_obj)
-    db.commit()
-    db.refresh(db_obj)
+    await db.commit()
+    await db.refresh(db_obj)
     return db_obj
 
 
-def delete(
-        db: Session,
+async def delete(
+        db: AsyncSession,
         db_obj: Project
 ):
-    db.delete(db_obj)
-    db.commit()
+    await db.delete(db_obj)
+    await db.commit()
     return db_obj

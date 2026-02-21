@@ -1,14 +1,16 @@
 import json
-from sqlalchemy.orm import Session
+
+from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from google import genai
 from google.genai import types
+from pydantic import BaseModel
 
 from app.core.config import settings
-from app.core.prompts import StudyPrompts  # 👈 Новий імпорт
+from app.core.prompts import StudyPrompts
 from app.models.document import Document, DocumentChunk
 from app.models.analysis import ProjectAnalysis, ProjectAnalysisItem
-from app.schemas.study import ExamResponse
+from app.schemas.study import ExamResponse, KeyPointsResponse, UserQuestionsResponse
 
 # Ініціалізація клієнта
 client = genai.Client(api_key=settings.GEMINI_API_KEY)
@@ -21,7 +23,7 @@ class StudyService:
         """Створює унікальний підпис для набору файлів"""
         return ','.join(map(str, sorted(documents_ids)))
 
-    def _get_context(self, db: Session, project_id: int, document_ids: list[int] | None = None) -> str:
+    async def _get_context(self, db: AsyncSession, project_id: int, document_ids: list[int] | None = None) -> str:
         """Витягує текст з бази"""
         stmt = (
             select(DocumentChunk.chunk_text)
@@ -32,11 +34,18 @@ class StudyService:
         if document_ids:
             stmt = stmt.filter(Document.id.in_(document_ids))
 
-        chunks = db.scalars(stmt).all()
-        return "\n\n".join(chunks)
+        result = await db.execute(stmt)
+        chunks = result.scalars().all()
 
-    def _generate_ai(self, prompt: str, schema=None) -> str | ExamResponse:
-        """Єдина точка входу для запитів до AI"""
+        full_text = "\n\n".join(chunks)
+
+        if len(full_text) > 200_000:
+            return full_text[:200_000]
+        return full_text
+
+
+
+    def _generate_ai(self, prompt: str, schema=None) -> str | BaseModel:
         config = None
         if schema:
             config = types.GenerateContentConfig(
@@ -46,156 +55,179 @@ class StudyService:
 
         try:
             response = client.models.generate_content(
-                model="gemini-3-flash-preview",
+                model=settings.GEMINI_MODEL,
                 contents=prompt,
                 config=config
             )
 
             if schema:
-                # Якщо очікуємо JSON/Schema, парсимо його
-                return schema.model_validate_json(response.text)
+                return response.parsed
             return response.text
 
         except Exception as e:
             print(f"AI Generation Error: {e}")
-            return schema(questions=[]) if schema else "Виникла помилка при генерації."
+            if schema:
+                if schema == ExamResponse:
+                    return ExamResponse(questions=[])
+                if schema == KeyPointsResponse:
+                    return KeyPointsResponse(points=[])
+            return "Виникла помилка при генерації."
 
-    # --- CACHE LOGIC (Робота з БД) ---
+    # --- CACHE LOGIC ---
 
-    def _get_full_project_cache(self, db: Session, project_id: int, field: str):
-        """Шукає кеш для всього проєкту"""
-        analysis = db.query(ProjectAnalysis).filter_by(project_id=project_id).first()
-        if analysis:
-            return getattr(analysis, field)
-        return None
+    def _save_data_to_db(self, db_obj, field: str, value):
+        data_to_save = value
 
-    def _save_full_project_cache(self, db: Session, project_id: int, field: str, value):
-        """Зберігає кеш для всього проєкту"""
-        analysis = db.query(ProjectAnalysis).filter_by(project_id=project_id).first()
+        # 1. Якщо це Pydantic модель -> конвертуємо в dict
+        if isinstance(value, BaseModel):
+            data_to_save = value.model_dump()
+
+        if field == "key_points" and not isinstance(data_to_save, str):
+            data_to_save = json.dumps(data_to_save, ensure_ascii=False)
+
+
+        setattr(db_obj, field, data_to_save)
+
+    async def _save_full_project_cache(self, db: AsyncSession, project_id: int, field: str, value):
+        stmt = (
+            select(ProjectAnalysisItem)
+            .filter_by(project_id=project_id)
+        )
+        result = await db.execute(stmt)
+        analysis = result.scalars().first()
         if not analysis:
             analysis = ProjectAnalysis(project_id=project_id)
             db.add(analysis)
 
-        # Для екзамену конвертуємо в dict, для тексту - лишаємо як є
-        val_to_save = [q.model_dump() for q in value.questions] if field == "exam_questions" else value
-        setattr(analysis, field, val_to_save)
-        db.commit()
+        self._save_data_to_db(analysis, field, value)
+        await db.commit()
 
-    def _get_partial_cache(self, db: Session, project_id: int, doc_hash: str, field: str):
-        """Шукає кеш для вибірки файлів"""
-        item = db.query(ProjectAnalysisItem).filter_by(project_id=project_id, documents_hash=doc_hash).first()
-        if item:
-            return getattr(item, field)
-        return None
-
-    def _save_partial_cache(self, db: Session, project_id: int, doc_hash: str, field: str, value):
-        """Зберігає кеш для вибірки файлів"""
-        item = db.query(ProjectAnalysisItem).filter_by(project_id=project_id, documents_hash=doc_hash).first()
+    async def _save_partial_cache(self, db: AsyncSession, project_id: int, doc_hash: str, field: str, value):
+        stmt = (
+            select(ProjectAnalysisItem)
+            .filter_by(project_id=project_id, documents_hash=doc_hash)
+        )
+        result = await db.execute(stmt)
+        item = result.scalars().first()
         if not item:
             item = ProjectAnalysisItem(project_id=project_id, documents_hash=doc_hash)
             db.add(item)
 
-        val_to_save = [q.model_dump() for q in value.questions] if field == "exam_questions" else value
-        setattr(item, field, val_to_save)
-        db.commit()
+        self._save_data_to_db(item, field, value)
+        await db.commit()
 
     def _is_valid_result(self, result) -> bool:
-        """Перевіряє, чи варто зберігати цей результат у базу"""
-
-        # 1. Якщо це Екзамен (об'єкт ExamResponse)
-        if hasattr(result, "questions"):
-            # Не зберігаємо, якщо питань немає
+        if isinstance(result, ExamResponse):
             return bool(result.questions)
+        if isinstance(result, KeyPointsResponse):
+            return bool(result.points)
 
-        # 2. Якщо це Текст (Summary, Key Points)
         if isinstance(result, str):
-            if not result.strip():
-                return False  # Пустий рядок
-            if "Виникла помилка" in result or result.startswith("Error:"):
-                return False  # Повідомлення про помилку
-            if len(result) < 50:
-                return False  # Підозріло коротка відповідь
+            if not result.strip(): return False
+            if "Error" in result or "помилка" in result.lower(): return False
             return True
-
         return False
-    # --- MAIN ORCHESTRATOR (Головна функція) ---
 
-    def _process_request(self, db: Session, project_id: int, document_ids: list[int] | None, field_name: str, prompt_template: str, response_schema=None):
-        """
-        Універсальний метод, який:
-        1. Перевіряє кеш (повний або частковий).
-        2. Якщо пусто -> бере контекст.
-        3. Генерує через AI.
-        4. Зберігає в кеш.
-        """
+    # --- MAIN ORCHESTRATOR ---
 
-        # 1. Спроба взяти з кешу
+    async def _process_request(self, db: AsyncSession, project_id: int, document_ids: list[int] | None, field_name: str, prompt_template: str, response_schema=None):
+
         cached_data = None
         if not document_ids:
-            cached_data = self._get_full_project_cache(db, project_id, field_name)
+            stmt = (
+                select(ProjectAnalysis)
+                .filter_by(project_id=project_id)
+            )
+            result = await db.execute(stmt)
+            analysis = result.scalars().first()
+            if analysis: cached_data = getattr(analysis, field_name)
         else:
             doc_hash = self._get_docs_hash(document_ids)
-            cached_data = self._get_partial_cache(db, project_id, doc_hash, field_name)
+            stmt = (
+                select(ProjectAnalysisItem)
+                .filter_by(project_id=project_id, documents_hash=doc_hash)
+            )
+            result = await db.execute(stmt)
+            item = result.scalars().first()
+            if item: cached_data = getattr(item, field_name)
 
         if cached_data:
-            # Якщо це екзамен, відновлюємо Pydantic модель з JSON
             if response_schema:
-                return response_schema(questions=cached_data)
-            return cached_data
+                try:
+                    # Варіант А: Кеш прийшов як рядок (для key_points, бо в БД це TEXT)
+                    if isinstance(cached_data, str):
+                        data_dict = json.loads(cached_data)
+                        return response_schema(**data_dict)
 
-        # 2. Генерація (якщо кешу немає)
-        context = self._get_context(db, project_id, document_ids)
+                    # Варіант Б: Кеш прийшов як список/словник (для exam_questions, бо в БД це JSONB)
+                    if isinstance(cached_data, (dict, list)):
+                        # Специфіка ExamResponse: в БД ми могли зберегти просто список питань
+                        if field_name == "exam_questions" and isinstance(cached_data, list):
+                            return response_schema(questions=cached_data)
+
+                        return response_schema(**cached_data)
+
+                except Exception as e:
+                    print(f"Cache parsing error for {field_name}: {e}")
+            else:
+                return cached_data
+
+        context = await self._get_context(db, project_id, document_ids)
         if not context:
-            return response_schema(questions=[]) if response_schema else "Текст відсутній."
+            if response_schema:
+                if response_schema == ExamResponse: return ExamResponse(questions=[])
+                if response_schema == KeyPointsResponse: return KeyPointsResponse(points=[])
+            return "Текст відсутній."
 
-        # Формуємо промпт через шаблон
         full_prompt = prompt_template.format(context=context)
-
         result = self._generate_ai(full_prompt, schema=response_schema)
 
-        # 3. Збереження
         if self._is_valid_result(result):
             if not document_ids:
-                self._save_full_project_cache(db, project_id, field_name, result)
+                await self._save_full_project_cache(db, project_id, field_name, result)
             else:
-                self._save_partial_cache(db, project_id, self._get_docs_hash(document_ids), field_name, result)
-        else:
-            print(f"Warning: Invalid result for {field_name}: {result}")
+                await self._save_partial_cache(db, project_id, self._get_docs_hash(document_ids), field_name, result)
 
         return result
 
-    # --- PUBLIC API METHODS (Тепер вони дуже прості) ---
+    # --- PUBLIC API METHODS ---
 
-    def get_summary(self, db: Session, project_id: int, document_ids: list[int] | None) -> str:
-        return self._process_request(
+    async def get_summary(self, db: AsyncSession, project_id: int, document_ids: list[int] | None) -> str:
+        return await self._process_request(
             db, project_id, document_ids,
             field_name="summary",
             prompt_template=StudyPrompts.SUMMARY
         )
 
-    def get_keypoints(self, db: Session, project_id: int, document_ids: list[int] | None) -> str:
-        return self._process_request(
+    async def get_keypoints(self, db: AsyncSession, project_id: int, document_ids: list[int] | None) -> KeyPointsResponse:
+
+        return await self._process_request(
             db, project_id, document_ids,
             field_name="key_points",
-            prompt_template=StudyPrompts.KEY_POINTS
+            prompt_template=StudyPrompts.KEY_POINTS,
+            response_schema=KeyPointsResponse
         )
 
-    def get_exam_questions(self, db: Session, project_id: int, document_ids: list[int] | None) -> ExamResponse:
-        return self._process_request(
+    async def get_exam_questions(self, db: AsyncSession, project_id: int, document_ids: list[int] | None, difficulty="Medium",question_count = 10) -> ExamResponse:
+        prompt = StudyPrompts.EXAM_GENERATION.format(
+            difficulty=difficulty,
+            question_count=question_count,
+            context="{context}"
+        )
+        return await self._process_request(
             db, project_id, document_ids,
             field_name="exam_questions",
-            prompt_template=StudyPrompts.EXAM_GENERATION,
+            prompt_template=prompt,
             response_schema=ExamResponse
         )
 
-    def answer_user_questions(self, db: Session, project_id: int, questions: list[str], document_ids: list[int] | None) -> str:
-        # Тут кешування не потрібне, тому викликаємо напряму
-        context = self._get_context(db, project_id, document_ids)
+    async def answer_user_questions(self, db: AsyncSession, project_id: int, questions: list[str], document_ids: list[int] | None) -> str:
+        context = await self._get_context(db, project_id, document_ids)
         if not context: return "Немає контексту."
 
         q_list_str = "\n".join([f"- {q}" for q in questions])
         full_prompt = StudyPrompts.USER_QUESTION.format(questions_list=q_list_str, context=context)
 
-        return self._generate_ai(full_prompt)
+        return self._generate_ai(full_prompt,schema=UserQuestionsResponse)
 
 study_service = StudyService()

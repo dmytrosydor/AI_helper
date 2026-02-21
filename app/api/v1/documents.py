@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Response, BackgroundTasks
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
 
 from app.core.db import get_db
 from app.api.deps import get_current_user
@@ -16,14 +17,14 @@ router = APIRouter(prefix="/projects/{project_id}/documents", tags=["Documents"]
 # UPLOAD
 
 @router.post("/", response_model=DocumentResponse, status_code=status.HTTP_201_CREATED)
-def upload_document(
+async def upload_document(
         background_tasks: BackgroundTasks,
         project_id: int,
         file: UploadFile = File(...),
-        db: Session = Depends(get_db),
+        db: AsyncSession = Depends(get_db),
         current_user: User = Depends(get_current_user),
 ):
-    project = crud_project.get_by_id_and_owner(
+    project = await crud_project.get_by_id_and_owner(
         db=db,
         project_id=project_id,
         owner_id=current_user.id
@@ -35,10 +36,12 @@ def upload_document(
     if not file.filename:
         raise HTTPException(status_code=status.HTTP_400_NOT_FOUND, detail="Filename is missing")
 
-    existing_document = db.query(Document).filter(
+
+    stmt = select(Document).where(
         Document.project_id == project_id,
-        Document.filename == file.filename
-    ).first()
+        Document.filename == file.filename)
+    result = await db.execute(stmt)
+    existing_document = result.scalars().first()
 
     if existing_document:
         # 409 Conflict - стандартний код для дублікатів
@@ -54,7 +57,7 @@ def upload_document(
 
     doc_in = DocumentCreate(filename=file.filename)
 
-    document = crud_document.create(
+    document = await crud_document.create(
         db=db,
         obj_in=doc_in,
         file_path=file_path,
@@ -65,31 +68,31 @@ def upload_document(
 
 
 @router.get("/{document_id}", response_model=DocumentResponse)
-def get_document(
+async def get_document(
         project_id: int,
         document_id: int,
-        db: Session = Depends(get_db),
+        db: AsyncSession = Depends(get_db),
         current_user: User = Depends(get_current_user),
 ):
-    project = crud_project.get_by_id_and_owner(db, owner_id=current_user.id, project_id=project_id)
+    project = await crud_project.get_by_id_and_owner(db, owner_id=current_user.id, project_id=project_id)
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
 
-    document = crud_document.get_by_id_and_project_id(db, project_id, document_id)
+    document = await crud_document.get_by_id_and_project_id(db, project_id, document_id)
     if not document:
         raise HTTPException(status_code=404, detail="Document not found")
 
     return document
 @router.get("/", response_model=list[DocumentResponse])
-def read_documents(
+async def read_documents(
         project_id:int,
         skip: int = 0,
         limit: int = 100,
-        db: Session = Depends(get_db),
+        db: AsyncSession = Depends(get_db),
         current_user: User = Depends(get_current_user),
 ):
 
-    project = crud_project.get_by_id_and_owner(
+    project = await crud_project.get_by_id_and_owner(
         db=db,
         project_id=project_id,
         owner_id=current_user.id
@@ -97,19 +100,19 @@ def read_documents(
     if not project:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found")
 
-    return crud_document.get_multiple_documents_by_project_id(
+    return await crud_document.get_multiple_documents_by_project_id(
         db=db,
         project_id=project_id,
     )
 
 @router.delete("/{document_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_document(
+async def delete_document(
         project_id: int,
         document_id: int,
-        db: Session = Depends(get_db),
+        db: AsyncSession = Depends(get_db),
         current_user: User = Depends(get_current_user),
 ):
-    project = crud_project.get_by_id_and_owner(
+    project = await crud_project.get_by_id_and_owner(
         db=db,
         project_id=project_id,
         owner_id=current_user.id
@@ -118,7 +121,7 @@ def delete_document(
     if not project:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found")
 
-    document = crud_document.get_by_id_and_project_id(
+    document = await crud_document.get_by_id_and_project_id(
         db=db,
         project_id=project_id,
         document_id=document_id
@@ -128,7 +131,7 @@ def delete_document(
 
     delete_file(document.file_path)
 
-    crud_document.delete(
+    await crud_document.delete(
         db=db,
         db_obj=document
     )

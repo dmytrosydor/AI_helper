@@ -1,8 +1,8 @@
 from google import genai
-from google.genai import types # <--- Додано імпорт types
-from sqlalchemy.orm import Session
+from google.genai import types
 from app.core.config import settings
-from app.core.db import SessionLocal
+from app.core.db import AsyncSessionLocal
+from sqlalchemy import select
 from app.models.document import Document, DocumentChunk
 from app.services.pdf_service import pdf_service
 
@@ -11,32 +11,39 @@ client = genai.Client(api_key=settings.GEMINI_API_KEY)
 class RagService:
     def get_embedding(self, text: str) -> list[float]:
         try:
-            # Використовуємо text-embedding-004
+            # Використовуємо text-embedding
             result = client.models.embed_content(
                 model="gemini-embedding-001",
                 contents=text,
                 config=types.EmbedContentConfig(output_dimensionality=768)
             )
             print("Result:", result)
-            # В SDK genai це зазвичай атрибут values, а не функція values()
+
             return result.embeddings[0].values
         except Exception as e:
             print(f"Gemini API Error: {e}")
             return []
 
-    def process_document(self, document_id: int):
-        # Відкриваємо власну сесію
-        with SessionLocal() as db:
-            print(f"--- 🚀 Start processing document ID {document_id} ---")
+    async def process_document(self, document_id: int):
 
-            document = db.query(Document).filter(Document.id == document_id).first()
+        async with AsyncSessionLocal() as db:
+            print(f"---Start processing document ID {document_id} ---")
+
+            stmt = (
+                select(Document)
+                .filter(Document.id == document_id)
+            )
+            result = await db.execute(stmt)
+            document = result.scalars().first()
+
             if not document:
-                print("❌ Document not found in DB")
+                print("Document not found in DB")
                 return
 
+            # Ці статуси потрібні для того щоб UI розумів коли бд вже зберегла усі чанки і готова обробляти їх
             # 1. Починаємо обробку: статус "processing"
             document.processing_status = "processing"
-            db.commit()
+            await db.commit()
 
             try:
                 full_text = pdf_service.extract_text(document.file_path)
@@ -45,7 +52,7 @@ class RagService:
                     print(f"⚠️ Document {document.id} has no text")
                     # Помилка: пустий текст
                     document.processing_status = "failed"
-                    db.commit()
+                    await db.commit()
                     return
 
                 chunk_size = 1000
@@ -74,21 +81,18 @@ class RagService:
 
                 if new_chunks:
                     db.add_all(new_chunks)
-                    # 2. Успіх: статус "completed"
                     document.processing_status = "completed"
-                    db.commit()
-                    print(f"✅ Successfully saved {len(new_chunks)} chunks")
+                    await db.commit()
+                    print(f" Successfully saved {len(new_chunks)} chunks")
                 else:
-                    print(f"⚠️ No chunks were created/saved")
-                    # Помилка: чанки не створились
+                    print(f" No chunks were created/saved")
                     document.processing_status = "failed"
-                    db.commit()
+                    await db.commit()
 
             except Exception as e:
                 print(f"❌ Error processing document: {e}")
-                # 3. Глобальна помилка: статус "failed"
                 document.processing_status = "failed"
-                db.commit()
+                await db.commit()
 
 
 rag_service = RagService()
