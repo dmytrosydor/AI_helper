@@ -46,7 +46,6 @@ class StudyService:
 
 
     def _generate_ai(self, prompt: str, schema=None) -> str | BaseModel:
-        """Єдина точка входу для запитів до AI"""
         config = None
         if schema:
             config = types.GenerateContentConfig(
@@ -62,13 +61,11 @@ class StudyService:
             )
 
             if schema:
-                # Повертаємо розпарсений Pydantic об'єкт
                 return response.parsed
             return response.text
 
         except Exception as e:
             print(f"AI Generation Error: {e}")
-            # Повертаємо пустий об'єкт у випадку помилки, щоб фронтенд не падав
             if schema:
                 if schema == ExamResponse:
                     return ExamResponse(questions=[])
@@ -76,18 +73,15 @@ class StudyService:
                     return KeyPointsResponse(points=[])
             return "Виникла помилка при генерації."
 
-    # --- CACHE LOGIC (Збереження та читання) ---
+    # --- CACHE LOGIC ---
 
     def _save_data_to_db(self, db_obj, field: str, value):
-        """Універсальне збереження даних в об'єкт БД"""
         data_to_save = value
 
         # 1. Якщо це Pydantic модель -> конвертуємо в dict
         if isinstance(value, BaseModel):
             data_to_save = value.model_dump()
 
-        # 2. Специфічна логіка для типів колонок у БД
-        # key_points у нас TEXT, тому треба перетворити dict -> str (JSON)
         if field == "key_points" and not isinstance(data_to_save, str):
             data_to_save = json.dumps(data_to_save, ensure_ascii=False)
 
@@ -123,13 +117,11 @@ class StudyService:
         await db.commit()
 
     def _is_valid_result(self, result) -> bool:
-        # Перевірка Pydantic моделей
         if isinstance(result, ExamResponse):
             return bool(result.questions)
         if isinstance(result, KeyPointsResponse):
             return bool(result.points)
 
-        # Перевірка тексту
         if isinstance(result, str):
             if not result.strip(): return False
             if "Error" in result or "помилка" in result.lower(): return False
@@ -140,7 +132,6 @@ class StudyService:
 
     async def _process_request(self, db: AsyncSession, project_id: int, document_ids: list[int] | None, field_name: str, prompt_template: str, response_schema=None):
 
-        # 1. Спроба взяти з кешу
         cached_data = None
         if not document_ids:
             stmt = (
@@ -160,7 +151,6 @@ class StudyService:
             item = result.scalars().first()
             if item: cached_data = getattr(item, field_name)
 
-        # 2. Якщо кеш є, треба його правильно відновити (Re-hydrate)
         if cached_data:
             if response_schema:
                 try:
@@ -179,11 +169,9 @@ class StudyService:
 
                 except Exception as e:
                     print(f"Cache parsing error for {field_name}: {e}")
-                    # Якщо кеш битий, ігноруємо і йдемо генерувати
             else:
                 return cached_data
 
-        # 3. Генерація (якщо кешу немає або він битий)
         context = await self._get_context(db, project_id, document_ids)
         if not context:
             if response_schema:
@@ -194,7 +182,6 @@ class StudyService:
         full_prompt = prompt_template.format(context=context)
         result = self._generate_ai(full_prompt, schema=response_schema)
 
-        # 4. Збереження
         if self._is_valid_result(result):
             if not document_ids:
                 await self._save_full_project_cache(db, project_id, field_name, result)

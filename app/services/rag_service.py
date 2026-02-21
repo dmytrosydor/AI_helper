@@ -11,23 +11,23 @@ client = genai.Client(api_key=settings.GEMINI_API_KEY)
 class RagService:
     def get_embedding(self, text: str) -> list[float]:
         try:
-            # Використовуємо text-embedding-004
+            # Використовуємо text-embedding
             result = client.models.embed_content(
                 model="gemini-embedding-001",
                 contents=text,
                 config=types.EmbedContentConfig(output_dimensionality=768)
             )
             print("Result:", result)
-            # В SDK genai це зазвичай атрибут values, а не функція values()
+
             return result.embeddings[0].values
         except Exception as e:
             print(f"Gemini API Error: {e}")
             return []
 
     async def process_document(self, document_id: int):
-        # Відкриваємо власну сесію
+
         async with AsyncSessionLocal() as db:
-            print(f"--- 🚀 Start processing document ID {document_id} ---")
+            print(f"---Start processing document ID {document_id} ---")
 
             stmt = (
                 select(Document)
@@ -37,9 +37,10 @@ class RagService:
             document = result.scalars().first()
 
             if not document:
-                print("❌ Document not found in DB")
+                print("Document not found in DB")
                 return
 
+            # Ці статуси потрібні для того щоб UI розумів коли бд вже зберегла усі чанки і готова обробляти їх
             # 1. Починаємо обробку: статус "processing"
             document.processing_status = "processing"
             await db.commit()
@@ -80,19 +81,16 @@ class RagService:
 
                 if new_chunks:
                     db.add_all(new_chunks)
-                    # 2. Успіх: статус "completed"
                     document.processing_status = "completed"
                     await db.commit()
-                    print(f"✅ Successfully saved {len(new_chunks)} chunks")
+                    print(f" Successfully saved {len(new_chunks)} chunks")
                 else:
-                    print(f"⚠️ No chunks were created/saved")
-                    # Помилка: чанки не створились
+                    print(f" No chunks were created/saved")
                     document.processing_status = "failed"
                     await db.commit()
 
             except Exception as e:
                 print(f"❌ Error processing document: {e}")
-                # 3. Глобальна помилка: статус "failed"
                 document.processing_status = "failed"
                 await db.commit()
 

@@ -44,9 +44,9 @@ async def login(
     response.set_cookie(
         key="refresh_token",
         value=refresh_token,
-        httponly=True,   # JS не має доступу
-        secure=False,    # Зміни на True, коли підключиш HTTPS (на проді)
-        samesite="lax",  # Захист від CSRF
+        httponly=True,
+        secure=False,    # TODO Зміни на True, коли буде HTTPS
+        samesite="lax",
         max_age=7 * 24 * 60 * 60  # 7 днів
     )
 
@@ -59,7 +59,7 @@ async def login(
 @router.post("/refresh", response_model=Token)
 async def refresh_token(
         response: Response,
-        refresh_token: str | None = Cookie(None),  # FastAPI сам дістане з кук
+        refresh_token: str | None = Cookie(None),
         db: AsyncSession = Depends(get_db)
 ):
     """
