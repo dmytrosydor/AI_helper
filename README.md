@@ -66,3 +66,4 @@ docker-compose up --build
 ```
 docker-compose exec api alembic upgrade head
 ```
+* **Swagger**: Використовуйте `http://localhost:8000/docs` для використання сервісу
