@@ -18,8 +18,8 @@
 * **AI Models**: Google Gemini 2.5-flash (для генерації).
 * **Database**: PostgreSQL + **pgvector** (векторне сховище).
 * **Migrations**: Alembic.
-* **Secure Authentication**: JWT (Access & Refresh tokens)
-* **Containerization**: Docker & Docker Compose. `Access token` використовується для авторизації запитів, а `Refresh token` зберігається в **HttpOnly, Secure Cookie** для запобігання XSS-атакам та забезпечення тривалих сесій.
+* **Secure Authentication**: JWT (Access & Refresh tokens). `Access token` використовується для авторизації запитів, а `Refresh token` зберігається в **HttpOnly, Secure Cookie** для запобігання XSS-атакам та забезпечення тривалих сесій.
+* **Containerization**: Docker & Docker Compose. 
 * **Observability**: LangSmith (інтегровано для трейсингу ШІ-пайплайнів).
 * **Hybrid Search Implementation**: Система використовує `L2 distance` для векторного пошуку через `pgvector` та `GIN index` з `tsvector` для ключових слів. Результати об'єднуються за допомогою алгоритму **Reciprocal Rank Fusion (RRF)**.
 
