@@ -1,29 +1,31 @@
 import json
 
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
 from google import genai
 from google.genai import types
 from pydantic import BaseModel
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.core.prompts import StudyPrompts
-from app.models.document import Document, DocumentChunk
 from app.models.analysis import ProjectAnalysis, ProjectAnalysisItem
+from app.models.document import Document, DocumentChunk
 from app.schemas.study import ExamResponse, KeyPointsResponse, UserQuestionsResponse
 
 # Ініціалізація клієнта
 client = genai.Client(api_key=settings.GEMINI_API_KEY)
 
-class StudyService:
 
+class StudyService:
     # --- HELPER METHODS ---
 
     def _get_docs_hash(self, documents_ids: list[int]) -> str:
         """Створює унікальний підпис для набору файлів"""
-        return ','.join(map(str, sorted(documents_ids)))
+        return ",".join(map(str, sorted(documents_ids)))
 
-    async def _get_context(self, db: AsyncSession, project_id: int, document_ids: list[int] | None = None) -> str:
+    async def _get_context(
+        self, db: AsyncSession, project_id: int, document_ids: list[int] | None = None
+    ) -> str:
         """Витягує текст з бази"""
         stmt = (
             select(DocumentChunk.chunk_text)
@@ -43,21 +45,16 @@ class StudyService:
             return full_text[:200_000]
         return full_text
 
-
-
     def _generate_ai(self, prompt: str, schema=None) -> str | BaseModel:
         config = None
         if schema:
             config = types.GenerateContentConfig(
-                response_mime_type="application/json",
-                response_schema=schema
+                response_mime_type="application/json", response_schema=schema
             )
 
         try:
             response = client.models.generate_content(
-                model=settings.GEMINI_MODEL,
-                contents=prompt,
-                config=config
+                model=settings.GEMINI_MODEL, contents=prompt, config=config
             )
 
             if schema:
@@ -85,14 +82,10 @@ class StudyService:
         if field == "key_points" and not isinstance(data_to_save, str):
             data_to_save = json.dumps(data_to_save, ensure_ascii=False)
 
-
         setattr(db_obj, field, data_to_save)
 
     async def _save_full_project_cache(self, db: AsyncSession, project_id: int, field: str, value):
-        stmt = (
-            select(ProjectAnalysisItem)
-            .filter_by(project_id=project_id)
-        )
+        stmt = select(ProjectAnalysisItem).filter_by(project_id=project_id)
         result = await db.execute(stmt)
         analysis = result.scalars().first()
         if not analysis:
@@ -102,11 +95,10 @@ class StudyService:
         self._save_data_to_db(analysis, field, value)
         await db.commit()
 
-    async def _save_partial_cache(self, db: AsyncSession, project_id: int, doc_hash: str, field: str, value):
-        stmt = (
-            select(ProjectAnalysisItem)
-            .filter_by(project_id=project_id, documents_hash=doc_hash)
-        )
+    async def _save_partial_cache(
+        self, db: AsyncSession, project_id: int, doc_hash: str, field: str, value
+    ):
+        stmt = select(ProjectAnalysisItem).filter_by(project_id=project_id, documents_hash=doc_hash)
         result = await db.execute(stmt)
         item = result.scalars().first()
         if not item:
@@ -123,33 +115,40 @@ class StudyService:
             return bool(result.points)
 
         if isinstance(result, str):
-            if not result.strip(): return False
-            if "Error" in result or "помилка" in result.lower(): return False
+            if not result.strip():
+                return False
+            if "Error" in result or "помилка" in result.lower():
+                return False
             return True
         return False
 
     # --- MAIN ORCHESTRATOR ---
 
-    async def _process_request(self, db: AsyncSession, project_id: int, document_ids: list[int] | None, field_name: str, prompt_template: str, response_schema=None):
-
+    async def _process_request(
+        self,
+        db: AsyncSession,
+        project_id: int,
+        document_ids: list[int] | None,
+        field_name: str,
+        prompt_template: str,
+        response_schema=None,
+    ):
         cached_data = None
         if not document_ids:
-            stmt = (
-                select(ProjectAnalysis)
-                .filter_by(project_id=project_id)
-            )
+            stmt = select(ProjectAnalysis).filter_by(project_id=project_id)
             result = await db.execute(stmt)
             analysis = result.scalars().first()
-            if analysis: cached_data = getattr(analysis, field_name)
+            if analysis:
+                cached_data = getattr(analysis, field_name)
         else:
             doc_hash = self._get_docs_hash(document_ids)
-            stmt = (
-                select(ProjectAnalysisItem)
-                .filter_by(project_id=project_id, documents_hash=doc_hash)
+            stmt = select(ProjectAnalysisItem).filter_by(
+                project_id=project_id, documents_hash=doc_hash
             )
             result = await db.execute(stmt)
             item = result.scalars().first()
-            if item: cached_data = getattr(item, field_name)
+            if item:
+                cached_data = getattr(item, field_name)
 
         if cached_data:
             if response_schema:
@@ -175,8 +174,10 @@ class StudyService:
         context = await self._get_context(db, project_id, document_ids)
         if not context:
             if response_schema:
-                if response_schema == ExamResponse: return ExamResponse(questions=[])
-                if response_schema == KeyPointsResponse: return KeyPointsResponse(points=[])
+                if response_schema == ExamResponse:
+                    return ExamResponse(questions=[])
+                if response_schema == KeyPointsResponse:
+                    return KeyPointsResponse(points=[])
             return "Текст відсутній."
 
         full_prompt = prompt_template.format(context=context)
@@ -186,48 +187,76 @@ class StudyService:
             if not document_ids:
                 await self._save_full_project_cache(db, project_id, field_name, result)
             else:
-                await self._save_partial_cache(db, project_id, self._get_docs_hash(document_ids), field_name, result)
+                await self._save_partial_cache(
+                    db,
+                    project_id,
+                    self._get_docs_hash(document_ids),
+                    field_name,
+                    result,
+                )
 
         return result
 
     # --- PUBLIC API METHODS ---
 
-    async def get_summary(self, db: AsyncSession, project_id: int, document_ids: list[int] | None) -> str:
+    async def get_summary(
+        self, db: AsyncSession, project_id: int, document_ids: list[int] | None
+    ) -> str:
         return await self._process_request(
-            db, project_id, document_ids,
+            db,
+            project_id,
+            document_ids,
             field_name="summary",
-            prompt_template=StudyPrompts.SUMMARY
+            prompt_template=StudyPrompts.SUMMARY,
         )
 
-    async def get_keypoints(self, db: AsyncSession, project_id: int, document_ids: list[int] | None) -> KeyPointsResponse:
-
+    async def get_keypoints(
+        self, db: AsyncSession, project_id: int, document_ids: list[int] | None
+    ) -> KeyPointsResponse:
         return await self._process_request(
-            db, project_id, document_ids,
+            db,
+            project_id,
+            document_ids,
             field_name="key_points",
             prompt_template=StudyPrompts.KEY_POINTS,
-            response_schema=KeyPointsResponse
+            response_schema=KeyPointsResponse,
         )
 
-    async def get_exam_questions(self, db: AsyncSession, project_id: int, document_ids: list[int] | None, difficulty="Medium",question_count = 10) -> ExamResponse:
+    async def get_exam_questions(
+        self,
+        db: AsyncSession,
+        project_id: int,
+        document_ids: list[int] | None,
+        difficulty="Medium",
+        question_count=10,
+    ) -> ExamResponse:
         prompt = StudyPrompts.EXAM_GENERATION.format(
-            difficulty=difficulty,
-            question_count=question_count,
-            context="{context}"
+            difficulty=difficulty, question_count=question_count, context="{context}"
         )
         return await self._process_request(
-            db, project_id, document_ids,
+            db,
+            project_id,
+            document_ids,
             field_name="exam_questions",
             prompt_template=prompt,
-            response_schema=ExamResponse
+            response_schema=ExamResponse,
         )
 
-    async def answer_user_questions(self, db: AsyncSession, project_id: int, questions: list[str], document_ids: list[int] | None) -> str:
+    async def answer_user_questions(
+        self,
+        db: AsyncSession,
+        project_id: int,
+        questions: list[str],
+        document_ids: list[int] | None,
+    ) -> str:
         context = await self._get_context(db, project_id, document_ids)
-        if not context: return "Немає контексту."
+        if not context:
+            return "Немає контексту."
 
         q_list_str = "\n".join([f"- {q}" for q in questions])
         full_prompt = StudyPrompts.USER_QUESTION.format(questions_list=q_list_str, context=context)
 
-        return self._generate_ai(full_prompt,schema=UserQuestionsResponse)
+        return self._generate_ai(full_prompt, schema=UserQuestionsResponse)
+
 
 study_service = StudyService()

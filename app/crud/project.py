@@ -1,14 +1,11 @@
-from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from app.models.project import Project
 from app.schemas.project import ProjectCreate, ProjectUpdate
 
 
-async def create(
-        db: AsyncSession,
-        obj_in: ProjectCreate,
-        owner_id: int
-) -> Project:
+async def create(db: AsyncSession, obj_in: ProjectCreate, owner_id: int) -> Project:
     db_obj = Project(
         name=obj_in.name,
         description=obj_in.description,
@@ -21,10 +18,10 @@ async def create(
 
 
 async def get_multi_by_owner(
-        db: AsyncSession,
-        owner_id: int,
-        skip: int = 0,
-        limit: int = 100,
+    db: AsyncSession,
+    owner_id: int,
+    skip: int = 0,
+    limit: int = 100,
 ) -> list[Project]:
     stmt = select(Project).filter(Project.owner_id == owner_id).offset(skip).limit(limit)
     result = await db.execute(stmt)
@@ -32,18 +29,19 @@ async def get_multi_by_owner(
 
 
 async def get_by_id_and_owner(
-        db: AsyncSession,
-        owner_id: int,
-        project_id: int,
+    db: AsyncSession,
+    owner_id: int,
+    project_id: int,
 ) -> type[Project] | None:
     stmt = select(Project).filter(Project.id == project_id, Project.owner_id == owner_id)
     result = await db.execute(stmt)
     return result.scalars().first()
 
+
 async def update(
-        db: AsyncSession,
-        db_obj: Project,
-        obj_in: ProjectUpdate,
+    db: AsyncSession,
+    db_obj: Project,
+    obj_in: ProjectUpdate,
 ) -> Project:
     """
 
@@ -60,10 +58,7 @@ async def update(
     return db_obj
 
 
-async def delete(
-        db: AsyncSession,
-        db_obj: Project
-):
+async def delete(db: AsyncSession, db_obj: Project):
     await db.delete(db_obj)
     await db.commit()
     return db_obj

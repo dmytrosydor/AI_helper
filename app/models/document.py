@@ -1,9 +1,10 @@
-from sqlalchemy import String, ForeignKey, Text, Integer, Computed, Index
-from sqlalchemy.orm import relationship, Mapped, mapped_column
-from sqlalchemy.dialects.postgresql import TSVECTOR
-from sqlalchemy.sql import func
 from datetime import datetime
+
 from pgvector.sqlalchemy import Vector
+from sqlalchemy import Computed, ForeignKey, Index, Integer, String, Text
+from sqlalchemy.dialects.postgresql import TSVECTOR
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.sql import func
 
 from app.core.db import Base
 from app.models.project import Project
@@ -25,8 +26,7 @@ class Document(Base):
     project: Mapped["Project"] = relationship(back_populates="documents")
 
     chunks: Mapped[list["DocumentChunk"]] = relationship(
-        back_populates="document",
-        cascade="all,  delete-orphan"
+        back_populates="document", cascade="all,  delete-orphan"
     )
 
     def __repr__(self):
@@ -48,11 +48,10 @@ class DocumentChunk(Base):
     content_tsvector: Mapped[str] = mapped_column(
         TSVECTOR,
         Computed("to_tsvector('simple', chunk_text)", persisted=True),
-        nullable=True
+        nullable=True,
     )
 
     document: Mapped["Document"] = relationship(back_populates="chunks")
-
 
     __table_args__ = (
         Index(

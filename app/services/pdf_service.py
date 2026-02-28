@@ -1,7 +1,11 @@
 from pathlib import Path
+
 from pypdf import PdfReader
+
+
 class PDFService:
-    def extract_text(self, pdf_path: str):
+    @staticmethod
+    def extract_text(pdf_path: str):
         path = Path(pdf_path)
 
         if not path.is_file():
@@ -9,11 +13,9 @@ class PDFService:
 
         extension = path.suffix.lower()
 
-
         if extension != ".pdf":
-            raise FileExistsError(f"Extension not supported")
+            raise FileExistsError("Extension not supported")
         try:
-
             reader = PdfReader(str(path))
 
             text = ""
@@ -23,13 +25,7 @@ class PDFService:
                     text += extracted_text
             return text
         except Exception as e:
-            raise ValueError(f"Failed to extract text: {e}")
-
-        return ""
-
-
-
-
+            raise ValueError(f"Failed to extract text: {e}") from e
 
 
 pdf_service = PDFService()

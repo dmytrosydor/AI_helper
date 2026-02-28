@@ -10,12 +10,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libpq-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# Копіюємо файл проекту
 COPY pyproject.toml .
-# Якщо є uv.lock — обов'язково копіюй і його
-# COPY uv.lock .
+COPY uv.lock .
 
-# Встановлюємо залежності через uv (це буде набагато швидше за pip)
 RUN uv pip install --system -r pyproject.toml
 
 COPY . .

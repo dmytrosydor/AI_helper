@@ -1,7 +1,9 @@
-from sqlalchemy import Column, Integer, Text, ForeignKey, String
-from sqlalchemy.orm import relationship, mapped_column, Mapped
+from sqlalchemy import ForeignKey, String, Text
 from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+
 from app.core.db import Base
+
 
 class ProjectAnalysis(Base):
     __tablename__ = "project_analysis"
@@ -9,13 +11,12 @@ class ProjectAnalysis(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     project_id: Mapped[int] = mapped_column(ForeignKey("projects.id", ondelete="CASCADE"))
 
-
     summary: Mapped[str | None] = mapped_column(Text, nullable=True)
     key_points: Mapped[str | None] = mapped_column(Text, nullable=True)
     exam_questions: Mapped[str | None] = mapped_column(JSONB, nullable=True)
 
-
     project = relationship("Project", back_populates="analysis")
+
 
 class ProjectAnalysisItem(Base):
     __tablename__ = "project_analysis_item"

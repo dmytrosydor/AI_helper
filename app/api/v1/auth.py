@@ -1,15 +1,15 @@
-from fastapi import APIRouter, Depends, HTTPException, status, Response, Cookie
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from fastapi import APIRouter, Cookie, Depends, HTTPException, Response, status
 from fastapi.security import OAuth2PasswordRequestForm
-from jose import jwt, JWTError
+from jose import JWTError, jwt
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.schemas.user import UserCreate, UserResponse, Token
-from app.services.auth_service import register_user
+from app.core.config import settings
 from app.core.db import get_db
 from app.core.security import create_access_token, create_refresh_token, verify_password
-from app.core.config import settings
 from app.models.user import User
+from app.schemas.user import Token, UserCreate, UserResponse
+from app.services.auth_service import register_user
 
 router = APIRouter(prefix="/auth", tags=["Auth"])
 
@@ -22,9 +22,9 @@ async def register(user_data: UserCreate, db: AsyncSession = Depends(get_db)):
 
 @router.post("/login", response_model=Token)
 async def login(
-        response: Response,
-        form_data: OAuth2PasswordRequestForm = Depends(),
-        db: AsyncSession = Depends(get_db)
+    response: Response,
+    form_data: OAuth2PasswordRequestForm = Depends(),
+    db: AsyncSession = Depends(get_db),
 ):
     stmt = select(User).where(User.email == form_data.username)
     result = await db.execute(stmt)
@@ -34,20 +34,19 @@ async def login(
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect email or password",
-            headers={"WWW-Authenticate": "Bearer"}
+            headers={"WWW-Authenticate": "Bearer"},
         )
 
     access_token = create_access_token(data={"sub": str(user.id)})
     refresh_token = create_refresh_token(data={"sub": str(user.id)})
 
-
     response.set_cookie(
         key="refresh_token",
         value=refresh_token,
         httponly=True,
-        secure=False,    # TODO Зміни на True, коли буде HTTPS
+        secure=False,  # TODO Зміни на True, коли буде HTTPS
         samesite="lax",
-        max_age=7 * 24 * 60 * 60  # 7 днів
+        max_age=7 * 24 * 60 * 60,  # 7 днів
     )
 
     return {
@@ -58,9 +57,9 @@ async def login(
 
 @router.post("/refresh", response_model=Token)
 async def refresh_token(
-        response: Response,
-        refresh_token: str | None = Cookie(None),
-        db: AsyncSession = Depends(get_db)
+    response: Response,
+    refresh_token: str | None = Cookie(None),
+    db: AsyncSession = Depends(get_db),
 ):
     """
     Приймає refresh_token з кук і оновлює пару (Access + Cookie Refresh).
@@ -75,7 +74,6 @@ async def refresh_token(
         raise credentials_exception
 
     try:
-
         payload = jwt.decode(refresh_token, settings.SECRET_KEY, algorithms=["HS256"])
         user_id: str = payload.get("sub")
         token_type: str = payload.get("type")
@@ -83,17 +81,14 @@ async def refresh_token(
         if user_id is None or token_type != "refresh":
             raise credentials_exception
 
-
         stmt = select(User).where(User.id == int(user_id))
         result = await db.execute(stmt)
         user = result.scalars().first()
         if user is None:
             raise credentials_exception
 
-
         new_access_token = create_access_token(data={"sub": str(user.id)})
         new_refresh_token = create_refresh_token(data={"sub": str(user.id)})
-
 
         response.set_cookie(
             key="refresh_token",
@@ -101,9 +96,8 @@ async def refresh_token(
             httponly=True,
             secure=False,
             samesite="lax",
-            max_age=7 * 24 * 60 * 60
+            max_age=7 * 24 * 60 * 60,
         )
-
 
         return {
             "access_token": new_access_token,
@@ -111,7 +105,7 @@ async def refresh_token(
         }
 
     except JWTError:
-        raise credentials_exception
+        raise credentials_exception from None
 
 
 @router.post("/logout")
