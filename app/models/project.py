@@ -1,9 +1,17 @@
-from sqlalchemy import String, Boolean, Column, DateTime, ForeignKey, nulls_last
+from datetime import datetime
+from typing import TYPE_CHECKING
+
+from sqlalchemy import ForeignKey, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
-from datetime import datetime
 
 from app.core.db import Base
+from app.models import ProjectAnalysisItem
+
+if TYPE_CHECKING:
+    from .analysis import ProjectAnalysis, ProjectAnalysisItem
+    from .document import Document
+    from .user import User
 
 
 class Project(Base):
@@ -15,7 +23,9 @@ class Project(Base):
 
     description: Mapped[str] = mapped_column(String(255), nullable=True)
 
-    owner_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    owner_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
 
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())
 
@@ -32,11 +42,9 @@ class Project(Base):
     )
 
     analysis_items: Mapped[list["ProjectAnalysisItem"]] = relationship(
-        "ProjectAnalysisItem",
-        back_populates="project",
-        cascade="all, delete-orphan"
+        "ProjectAnalysisItem", back_populates="project", cascade="all, delete-orphan"
     )
 
 
-def __repr__(self):
+def __repr__(self: object) -> str:
     return f"<Project id={self.id} name={self.name}>"

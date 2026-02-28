@@ -1,10 +1,11 @@
 from datetime import datetime
+
 from sqlalchemy import ForeignKey, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
 
-
 from app.core.db import Base
+
 
 class ChatHistory(Base):
     __tablename__ = "chat_history"

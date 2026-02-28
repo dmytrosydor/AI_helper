@@ -1,5 +1,8 @@
 FROM python:3.11-slim
 
+# Встановлюємо uv прямо в систему
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
+
 WORKDIR /code
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -7,8 +10,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libpq-dev \
     && rm -rf /var/lib/apt/lists/*
 
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+COPY pyproject.toml .
+COPY uv.lock .
+
+RUN uv pip install --system -r pyproject.toml
 
 COPY . .
 

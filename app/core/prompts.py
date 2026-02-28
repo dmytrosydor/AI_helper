@@ -1,5 +1,6 @@
 # app/core/prompts.py
 
+
 class StudyPrompts:
     SUMMARY = """
    You are a knowledgeable academic assistant with expertise in summarizing educational material and synthesizing complex information into clear, concise overviews. 

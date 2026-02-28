@@ -1,7 +1,7 @@
 from datetime import datetime, timedelta
+
 from jose import jwt
 from passlib.context import CryptContext
-from pyasn1_modules.rfc3125 import AlgorithmConstraints
 
 from app.core.config import settings
 
@@ -23,11 +23,8 @@ def create_access_token(data: dict, expires_minutes: int = 60):
     expire = datetime.utcnow() + timedelta(minutes=expires_minutes)
     to_encode.update({"exp": expire})
 
-    return jwt.encode(
-        to_encode,
-        settings.SECRET_KEY,
-        algorithm="HS256"
-    )
+    return jwt.encode(to_encode, settings.SECRET_KEY, algorithm="HS256")
+
 
 def create_refresh_token(data: dict, expires_days: int | None = None):
     to_encode = data.copy()
@@ -35,7 +32,7 @@ def create_refresh_token(data: dict, expires_days: int | None = None):
     if expires_days:
         expire = datetime.utcnow() + timedelta(days=expires_days)
     else:
-        expire = datetime.utcnow() + timedelta(days= settings.REFRESH_TOKEN_EXPIRE_DAYS)
+        expire = datetime.utcnow() + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS)
 
-    to_encode.update({"exp": expire,"type":"refresh"})
+    to_encode.update({"exp": expire, "type": "refresh"})
     return jwt.encode(to_encode, settings.SECRET_KEY, algorithm="HS256")

@@ -1,10 +1,11 @@
-from sqlalchemy import String, Boolean, Column, DateTime, ForeignKey
+from datetime import datetime
+
+from sqlalchemy import String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
 
-from datetime import datetime
-
 from app.core.db import Base
+from app.models import Project
 
 
 class User(Base):
@@ -23,7 +24,7 @@ class User(Base):
 
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())
 
-    projects : Mapped[list["Project"]] = relationship(back_populates = "owner")
+    projects: Mapped[list["Project"]] = relationship(back_populates="owner")
 
     def __repr__(self) -> str:
         return f"<User(id={self.id}, email='{self.email}'>"

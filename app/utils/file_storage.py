@@ -1,13 +1,14 @@
 import shutil
 import uuid
 from pathlib import Path
+
 from fastapi import UploadFile
 
 UPLOAD_DIR = Path("uploads")
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 
 
-def save_upload_file(upload_file: UploadFile)->str:
+def save_upload_file(upload_file: UploadFile) -> str:
     unique_filename = f"{uuid.uuid4()}_{upload_file.filename}"
     file_path = UPLOAD_DIR / unique_filename
 

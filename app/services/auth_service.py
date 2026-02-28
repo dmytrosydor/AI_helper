@@ -1,10 +1,9 @@
-from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.security import create_access_token, hash_password, verify_password
 from app.models.user import User
-
 from app.schemas.user import UserCreate
-from app.core.security import hash_password, verify_password, create_access_token
 
 
 async def register_user(db: AsyncSession, user_data: UserCreate) -> User:
@@ -32,4 +31,4 @@ async def authenticate_user(db: AsyncSession, email: str, password: str) -> str:
     if not verify_password(password, user.hashed_password):
         return None
 
-    return create_access_token({"sub":str(user.id)})
+    return create_access_token({"sub": str(user.id)})

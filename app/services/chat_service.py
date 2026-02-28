@@ -1,17 +1,18 @@
 import json
 
+from google import genai
+from langsmith import traceable
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
 from sqlalchemy.sql import func
-from sqlalchemy import select
-from google import genai
+
 from app.core.config import settings
-from app.models.chat import ChatHistory
-from app.models.document import DocumentChunk, Document
-from app.services.rag_service import rag_service
 from app.core.prompts import ChatPrompts
-from app.crud.chat import createChatHistory
-from langsmith import traceable
+from app.crud.chat import create_chat_history
+from app.models.chat import ChatHistory
+from app.models.document import Document, DocumentChunk
+from app.services.rag_service import rag_service
 
 client = genai.Client(api_key=settings.GEMINI_API_KEY)
 
@@ -32,18 +33,14 @@ class ChatService:
 
         history_str = ""
 
-        for item in (reversed(last_messages)):
+        for item in reversed(last_messages):
             history_str += f"User: {item.question}\nAI: {item.answer}\n"
 
-        prompt = ChatPrompts.REFORMAT_USER_QUESTION.format(
-            history=history_str,
-            question=question
-        )
+        prompt = ChatPrompts.REFORMAT_USER_QUESTION.format(history=history_str, question=question)
 
         try:
             response = client.models.generate_content(
-                model="gemini-2.5-flash-lite",
-                contents=prompt
+                model="gemini-2.5-flash-lite", contents=prompt
             )
 
             return response.text.strip()
@@ -69,7 +66,7 @@ class ChatService:
         query_vector = rag_service.get_embedding(query_reformat)
 
         if not query_vector:
-            yield f'data: {json.dumps({"error": "Error creating embedding"})}\n\n'
+            yield f"data: {json.dumps({'error': 'Error creating embedding'})}\n\n"
             return
 
         # 2. Пошук схожих шматків у базі
@@ -111,40 +108,36 @@ class ChatService:
             context_text = "\n\n".join([chunk.chunk_text for chunk in final_chunks])
             sources = list(set([chunk.document.filename for chunk in final_chunks]))
 
-        yield f'data: {json.dumps({"type": "sources", "data": sources})}\n\n'
+        yield f"data: {json.dumps({'type': 'sources', 'data': sources})}\n\n"
 
         if not final_chunks:
-            yield f'data: {json.dumps({"type": "answer", "data": "Я не знайшов інформації в документах."})}\n\n'
+            yield f"data: {json.dumps({'type': 'answer', 'data': 'Я не знайшов інформації в документах.'})}\n\n"
             return
 
-        prompt = ChatPrompts.MAIN_CHAT.format(
-            context=context_text,
-            query=query_reformat
-        )
+        prompt = ChatPrompts.MAIN_CHAT.format(context=context_text, query=query_reformat)
 
         try:
             response_stream = client.models.generate_content_stream(
-                model=settings.GEMINI_MODEL,
-                contents=prompt
+                model=settings.GEMINI_MODEL, contents=prompt
             )
 
             full_answer = ""
 
             for chunk in response_stream:
                 if chunk.text:
-                    yield f'data: {json.dumps({"type": "answer", "data": chunk.text})}\n\n'
+                    yield f"data: {json.dumps({'type': 'answer', 'data': chunk.text})}\n\n"
                     full_answer += chunk.text
 
-            await createChatHistory(
+            await create_chat_history(
                 db=db,
                 project_id=project_id,
                 user_id=user_id,
                 question=query_text,
-                answer=full_answer
+                answer=full_answer,
             )
         except Exception as e:
             print(f"Stream Error: {e}")
-            yield f'data: {json.dumps({"error": str(e)})}\n\n'
+            yield f"data: {json.dumps({'error': str(e)})}\n\n"
 
 
 chat_service = ChatService()
