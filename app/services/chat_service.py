@@ -1,4 +1,5 @@
 import json
+from math import inf
 
 from google import genai
 from langsmith import traceable
@@ -48,17 +49,31 @@ class ChatService:
             print(f"Gemini Error: {e}")
             return question
 
-    def _rrf_merge(self, vector_results, keyword_results, k=60):
+    def _rrf_merge(self, vector_results, keyword_results, k=60, w_vec=1.0, w_kw=0.8, top_n = 20):
         scores = {}
 
-        for rank, item in enumerate(vector_results):
-            if item.id not in scores:
-                scores[item.id] = {"item": item, "score": 0}
-            scores[item.id]["score"] += 1 / (k + rank + 1)
+        def add(results, weight):
+            for rank, item in enumerate(results):
+                entry = scores.get(item.id)
+                if entry is None:
+                    entry = {"item": item, "score": 0.0, "best_rank": inf}
+                    scores[item.id] = entry
 
-        sorted_items = sorted(scores.values(), key=lambda x: x["score"], reverse=True)
+                entry["score"] += weight / (k + rank + 1)
+                if rank < entry["best_rank"]:
+                    entry["best_rank"] = rank
 
-        return [entry["item"] for entry in sorted_items]
+        add(vector_results, w_vec)
+        add(keyword_results, w_kw)
+
+        # sort by: score desc, best_rank asc, id asc
+
+        sorted_entries = sorted(
+            scores.items(),
+            key=lambda kv: (-kv[1]["score"], kv[1]["best_rank"], kv[0]),
+        )
+
+        return [entry["item"] for _, entry in sorted_entries[:top_n]]
 
     @traceable(name="chat_pipeline")
     async def stream_chat(self, db: AsyncSession, project_id: int, user_id: int, query_text: str):
@@ -68,7 +83,6 @@ class ChatService:
         if not query_vector:
             yield f"data: {json.dumps({'error': 'Error creating embedding'})}\n\n"
             return
-
         # 2. Пошук схожих шматків у базі
         vector_stmt = (
             select(DocumentChunk)
