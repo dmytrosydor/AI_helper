@@ -49,7 +49,7 @@ class ChatService:
             print(f"Gemini Error: {e}")
             return question
 
-    def _rrf_merge(self, vector_results, keyword_results, k=60, w_vec=1.0, w_kw=0.8, top_n = 20):
+    def _rrf_merge(self, vector_results, keyword_results, k=60, w_vec=1.0, w_kw=0.8, top_n=20):
         scores = {}
 
         def add(results, weight):
